@@ -73,6 +73,9 @@
   .aviso.ok{background:#E6EFEC;color:var(--accion)}
   .aviso.mal{background:#F6E7E6;color:var(--alarma)}
   .vacio{color:var(--gris);padding:2rem 0;text-align:center;font-size:.9rem}
+  .sentido{font-size:.8rem;margin:.35rem 0 0;font-weight:600}
+  .sentido.entra{color:var(--accion)}
+  .sentido.sale{color:var(--alarma)}
   .resumen{color:var(--gris);font-size:.85rem;margin:.9rem 0 .2rem}
   .resumen strong{color:var(--tinta);font-weight:600}
 </style>
@@ -105,19 +108,11 @@
     <input id="m-fecha" type="date">
 
     <label for="m-motivo">Motivo</label>
-    <select id="m-motivo">
-      <option value="INGRESO_PRODUCCIÓN">Ingreso de producción</option>
-      <option value="COMPRA">Compra</option>
-      <option value="INGRESO_TERCEROS">Ingreso de terceros</option>
-      <option value="CONSUMO_PRODUCCIÓN">Consumo de producción</option>
-      <option value="TRASLADO_OTRO_DEPÓSITO">Traslado a otro depósito</option>
-      <option value="ROTURA_BAJA">Rotura o baja</option>
-      <option value="CHATARRA">Chatarra</option>
-      <option value="SALIDA_TERCEROS">Salida a terceros</option>
-    </select>
+    <select id="m-motivo"><option value="">Cargando…</option></select>
+    <p id="m-sentido" class="sentido"></p>
 
-    <label for="m-cant">Cantidad (negativa si sale)</label>
-    <input id="m-cant" type="number" inputmode="numeric" step="1" placeholder="Ej.: 50 o -12">
+    <label for="m-cant">Cantidad</label>
+    <input id="m-cant" type="number" inputmode="numeric" min="1" step="1" placeholder="Ej.: 50">
 
     <label for="m-nota">Nota (opcional)</label>
     <input id="m-nota" autocomplete="off">
@@ -136,8 +131,17 @@
 
     <label for="p-tipo">Tipo</label>
     <select id="p-tipo">
-      <option>COR</option><option>SE</option>
-      <option>ACC-F</option><option>ACC-C</option><option>MP</option>
+      <option value="COR">COR — corte</option>
+      <option value="SE">SE — semielaborado</option>
+      <option value="ACC">ACC — accesorio</option>
+      <option value="MP">MP — materia prima</option>
+    </select>
+
+    <label for="p-origen">Origen</label>
+    <select id="p-origen">
+      <option value="fabricado">Fabricado</option>
+      <option value="comprado">Comprado</option>
+      <option value="importado">Importado</option>
     </select>
 
     <label for="p-pos">Posición</label>
@@ -213,6 +217,31 @@ function pintar(){
 }
 $('buscar').oninput = pintar;
 
+// ---------- motivos (tabla motivos: el signo lo define la base) ----------
+let motivos = [];
+async function cargarMotivos(){
+  const { data, error } = await db.from('motivos').select('*');
+  if (error) {
+    $('m-motivo').innerHTML = '<option value="">Sin motivos</option>';
+    avisar('m-aviso', 'No se pudieron leer los motivos:\n' + error.message, false);
+    return;
+  }
+  // Entradas primero, después salidas; dentro de cada grupo, alfabético.
+  motivos = data.sort((a, b) => b.signo - a.signo || a.codigo.localeCompare(b.codigo));
+  const nombre = c => c.charAt(0) + c.slice(1).toLowerCase().replaceAll('_', ' ');
+  $('m-motivo').innerHTML = motivos
+    .map(m => `<option value="${m.codigo}">${nombre(m.codigo)}</option>`)
+    .join('');
+  mostrarSentido();
+}
+function mostrarSentido(){
+  const m = motivos.find(x => x.codigo === $('m-motivo').value);
+  const el = $('m-sentido');
+  el.className = 'sentido' + (m ? (m.signo > 0 ? ' entra' : ' sale') : '');
+  el.textContent = m ? (m.signo > 0 ? '↑ Entra al stock' : '↓ Sale del stock') : '';
+}
+$('m-motivo').onchange = mostrarSentido;
+
 // ---------- avisos ----------
 function avisar(donde, texto, ok){
   $(donde).innerHTML = `<div class="aviso ${ok ? 'ok' : 'mal'}">${texto}</div>`;
@@ -222,12 +251,18 @@ function avisar(donde, texto, ok){
 $('m-fecha').value = new Date().toISOString().slice(0, 10);
 
 $('m-guardar').onclick = async () => {
+  // Cortesía: la base es la que valida de verdad.
+  const cant = Number($('m-cant').value);
+  if (!Number.isInteger(cant) || cant <= 0) {
+    avisar('m-aviso', 'La cantidad tiene que ser un número entero mayor que cero.', false);
+    return;
+  }
   const b = $('m-guardar');
   b.disabled = true;
   const { error } = await db.from('movimientos').insert({
     producto: $('m-prod').value,
     fecha:    $('m-fecha').value,
-    cantidad: Number($('m-cant').value),
+    cantidad: cant,
     motivo:   $('m-motivo').value,
     nota:     $('m-nota').value || null
   });
@@ -247,6 +282,7 @@ $('p-guardar').onclick = async () => {
     codigo:      $('p-codigo').value.trim(),
     descripcion: $('p-desc').value.trim(),
     tipo:        $('p-tipo').value,
+    origen:      $('p-origen').value,
     posicion:    $('p-pos').value.trim() || null
   });
   b.disabled = false;
@@ -258,6 +294,7 @@ $('p-guardar').onclick = async () => {
 };
 
 cargarStock();
+cargarMotivos();
 </script>
 </body>
 </html>
