@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Inventario D&amp;L — Acermel</title>
+<style>
+  :root{
+    --papel:#F6F5F3;
+    --tinta:#171614;
+    --gris:#6E6A64;
+    --linea:#D9D5CE;
+    --campo:#FFFFFF;
+    --alarma:#A5281F;
+    --accion:#1F5F56;
+    color-scheme: light;
+    box-sizing:border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *,*::before,*::after{box-sizing:inherit}
+
+  body{
+    margin:0;
+    background:var(--papel);
+    color:var(--tinta);
+    font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  main{max-width:46rem;margin:0 auto;padding:1.5rem 1rem 4rem}
+
+  h1{font-size:1.15rem;font-weight:600;margin:0 0 .15rem}
+  .sub{color:var(--gris);font-size:.85rem;margin:0 0 1.5rem}
+
+  nav{display:flex;gap:.4rem;margin-bottom:1.25rem}
+  nav button{
+    flex:1;padding:.7rem .5rem;border:1px solid var(--linea);
+    background:var(--campo);color:var(--gris);border-radius:3px;
+    font:inherit;font-size:.9rem;cursor:pointer;
+  }
+  nav button[aria-selected="true"]{
+    background:var(--tinta);color:var(--papel);border-color:var(--tinta);font-weight:500;
+  }
+  nav button:focus-visible,input:focus-visible,select:focus-visible,
+  .enviar:focus-visible{outline:2px solid var(--accion);outline-offset:2px}
+
+  section[hidden]{display:none}
+
+  label{display:block;font-size:.8rem;color:var(--gris);margin:1rem 0 .3rem}
+  input,select{
+    width:100%;padding:.75rem;font:inherit;background:var(--campo);
+    color:var(--tinta);border:1px solid var(--linea);border-radius:3px;
+  }
+  .enviar{
+    width:100%;margin-top:1.5rem;padding:.9rem;background:var(--accion);
+    color:#fff;border:0;border-radius:3px;font:inherit;font-weight:500;cursor:pointer;
+  }
+  .enviar:disabled{opacity:.5;cursor:wait}
+
+  /* Lista de stock */
+  .fila{
+    display:flex;align-items:baseline;gap:.75rem;
+    padding:.8rem 0;border-bottom:1px solid var(--linea);
+  }
+  .fila .texto{flex:1;min-width:0}
+  .fila .codigo{font-weight:600;font-size:.9rem}
+  .fila .desc{color:var(--gris);font-size:.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fila .cant{font-size:1.5rem;font-weight:600;letter-spacing:-.02em}
+  .fila .cant.negativo{color:var(--alarma)}
+  .fila .donde{color:var(--gris);font-size:.75rem;min-width:2rem;text-align:right}
+
+  .aviso{padding:.8rem;border-radius:3px;margin-top:1rem;font-size:.9rem;white-space:pre-wrap}
+  .aviso.ok{background:#E6EFEC;color:var(--accion)}
+  .aviso.mal{background:#F6E7E6;color:var(--alarma)}
+  .vacio{color:var(--gris);padding:2rem 0;text-align:center;font-size:.9rem}
+</style>
+</head>
+<body>
+<main>
+
+  <h1>Inventario D&amp;L</h1>
+  <p class="sub">Centro de distribución y logística — Acermel</p>
+
+  <nav>
+    <button id="t-stock" aria-selected="true">Stock</button>
+    <button id="t-mov"   aria-selected="false">Movimiento</button>
+    <button id="t-prod"  aria-selected="false">Producto nuevo</button>
+  </nav>
+
+  <!-- ====== STOCK ====== -->
+  <section id="p-stock">
+    <input id="buscar" placeholder="Buscar por código o descripción" autocomplete="off">
+    <div id="lista"><p class="vacio">Cargando…</p></div>
+  </section>
+
+  <!-- ====== MOVIMIENTO ====== -->
+  <section id="p-mov" hidden>
+    <label for="m-prod">Producto</label>
+    <select id="m-prod"></select>
+
+    <label for="m-fecha">Fecha del movimiento</label>
+    <input id="m-fecha" type="date">
+
+    <label for="m-motivo">Motivo</label>
+    <select id="m-motivo">
+      <option value="INGRESO_PRODUCCIÓN">Ingreso de producción</option>
+      <option value="COMPRA">Compra</option>
+      <option value="INGRESO_TERCEROS">Ingreso de terceros</option>
+      <option value="CONSUMO_PRODUCCIÓN">Consumo de producción</option>
+      <option value="TRASLADO_OTRO_DEPÓSITO">Traslado a otro depósito</option>
+      <option value="ROTURA_BAJA">Rotura o baja</option>
+      <option value="CHATARRA">Chatarra</option>
+      <option value="SALIDA_TERCEROS">Salida a terceros</option>
+    </select>
+
+    <label for="m-cant">Cantidad (negativa si sale)</label>
+    <input id="m-cant" type="number" inputmode="numeric" step="1" placeholder="Ej.: 50 o -12">
+
+    <label for="m-nota">Nota (opcional)</label>
+    <input id="m-nota" autocomplete="off">
+
+    <button class="enviar" id="m-guardar">Registrar movimiento</button>
+    <div id="m-aviso"></div>
+  </section>
+
+  <!-- ====== PRODUCTO ====== -->
+  <section id="p-prod" hidden>
+    <label for="p-codigo">Código</label>
+    <input id="p-codigo" autocomplete="off" placeholder="Ej.: D430-15806">
+
+    <label for="p-desc">Descripción</label>
+    <input id="p-desc" autocomplete="off">
+
+    <label for="p-tipo">Tipo</label>
+    <select id="p-tipo">
+      <option>COR</option><option>SE</option>
+      <option>ACC-F</option><option>ACC-C</option><option>MP</option>
+    </select>
+
+    <label for="p-pos">Posición</label>
+    <input id="p-pos" autocomplete="off" placeholder="Ej.: D3">
+
+    <button class="enviar" id="p-guardar">Dar de alta</button>
+    <div id="p-aviso"></div>
+  </section>
+
+</main>
+
+<script type="module">
+// ============================================================
+//  PEGÁ ACÁ LOS DOS DATOS DE TU PROYECTO SUPABASE.
+//  Están en Project Settings → API.
+//  La anon key es pública a propósito: lo que protege de verdad
+//  son las policies que creaste en el SQL, no esta clave.
+// ============================================================
+const SUPABASE_URL  = 'https://vlygzhldkykilsuzcbfi.supabase.co';
+const SUPABASE_ANON = 'sb_publishable_FObCZuZpqp2WZInBSO24hw_T6kh5kez';
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+const db = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+const $ = id => document.getElementById(id);
+let filas = [];
+
+// ---------- pestañas ----------
+const tabs = [['t-stock','p-stock'],['t-mov','p-mov'],['t-prod','p-prod']];
+tabs.forEach(([bot, pan]) => $(bot).onclick = () => {
+  tabs.forEach(([b, p]) => {
+    $(b).setAttribute('aria-selected', b === bot);
+    $(p).hidden = p !== pan;
+  });
+  if (pan === 'p-stock') cargarStock();
+});
+
+// ---------- stock ----------
+async function cargarStock(){
+  const { data, error } = await db.from('stock').select('*').order('codigo');
+  if (error) { $('lista').innerHTML = `<p class="vacio">${error.message}</p>`; return; }
+  filas = data;
+  pintar();
+  $('m-prod').innerHTML = data
+    .map(f => `<option value="${f.codigo}">${f.codigo} — ${f.descripcion}</option>`)
+    .join('');
+}
+
+function pintar(){
+  const q = $('buscar').value.trim().toLowerCase();
+  const ver = q
+    ? filas.filter(f => (f.codigo + ' ' + f.descripcion).toLowerCase().includes(q))
+    : filas;
+
+  $('lista').innerHTML = ver.length === 0
+    ? '<p class="vacio">Sin resultados.</p>'
+    : ver.map(f => `
+        <div class="fila">
+          <div class="texto">
+            <div class="codigo">${f.codigo}</div>
+            <div class="desc">${f.descripcion}</div>
+          </div>
+          <div class="cant${f.stock < 0 ? ' negativo' : ''}">${f.stock}</div>
+          <div class="donde">${f.posicion ?? '—'}</div>
+        </div>`).join('');
+}
+$('buscar').oninput = pintar;
+
+// ---------- avisos ----------
+function avisar(donde, texto, ok){
+  $(donde).innerHTML = `<div class="aviso ${ok ? 'ok' : 'mal'}">${texto}</div>`;
+}
+
+// ---------- alta de movimiento ----------
+$('m-fecha').value = new Date().toISOString().slice(0, 10);
+
+$('m-guardar').onclick = async () => {
+  const b = $('m-guardar');
+  b.disabled = true;
+  const { error } = await db.from('movimientos').insert({
+    producto: $('m-prod').value,
+    fecha:    $('m-fecha').value,
+    cantidad: Number($('m-cant').value),
+    motivo:   $('m-motivo').value,
+    nota:     $('m-nota').value || null
+  });
+  b.disabled = false;
+
+  if (error) { avisar('m-aviso', 'La base lo rechazó:\n' + error.message, false); return; }
+  avisar('m-aviso', 'Movimiento registrado.', true);
+  $('m-cant').value = ''; $('m-nota').value = '';
+  cargarStock();
+};
+
+// ---------- alta de producto ----------
+$('p-guardar').onclick = async () => {
+  const b = $('p-guardar');
+  b.disabled = true;
+  const { error } = await db.from('productos').insert({
+    codigo:      $('p-codigo').value.trim(),
+    descripcion: $('p-desc').value.trim(),
+    tipo:        $('p-tipo').value,
+    posicion:    $('p-pos').value.trim() || null
+  });
+  b.disabled = false;
+
+  if (error) { avisar('p-aviso', 'La base lo rechazó:\n' + error.message, false); return; }
+  avisar('p-aviso', 'Producto dado de alta.', true);
+  $('p-codigo').value = ''; $('p-desc').value = ''; $('p-pos').value = '';
+  cargarStock();
+};
+
+cargarStock();
+</script>
+</body>
+</html>
