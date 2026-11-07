@@ -73,6 +73,8 @@
   .aviso.ok{background:#E6EFEC;color:var(--accion)}
   .aviso.mal{background:#F6E7E6;color:var(--alarma)}
   .vacio{color:var(--gris);padding:2rem 0;text-align:center;font-size:.9rem}
+  .resumen{color:var(--gris);font-size:.85rem;margin:.9rem 0 .2rem}
+  .resumen strong{color:var(--tinta);font-weight:600}
 </style>
 </head>
 <body>
@@ -90,6 +92,7 @@
   <!-- ====== STOCK ====== -->
   <section id="p-stock">
     <input id="buscar" placeholder="Buscar por código o descripción" autocomplete="off">
+    <p id="resumen" class="resumen" aria-live="polite"></p>
     <div id="lista"><p class="vacio">Cargando…</p></div>
   </section>
 
@@ -188,6 +191,13 @@ function pintar(){
   const ver = q
     ? filas.filter(f => (f.codigo + ' ' + f.descripcion).toLowerCase().includes(q))
     : filas;
+
+  const unidades = ver.reduce((t, f) => t + (Number(f.stock) || 0), 0);
+  const fmt = n => n.toLocaleString('es-AR');
+  $('resumen').innerHTML =
+    `<strong>${fmt(ver.length)}</strong> ${ver.length === 1 ? 'producto' : 'productos'}` +
+    (q ? ` de ${fmt(filas.length)}` : '') +
+    ` · <strong>${fmt(unidades)}</strong> ${unidades === 1 ? 'unidad' : 'unidades'} en total`;
 
   $('lista').innerHTML = ver.length === 0
     ? '<p class="vacio">Sin resultados.</p>'
