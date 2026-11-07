@@ -76,6 +76,7 @@
   .sentido{font-size:.8rem;margin:.35rem 0 0;font-weight:600}
   .sentido.entra{color:var(--accion)}
   .sentido.sale{color:var(--alarma)}
+  .ayuda{color:var(--gris);font-size:.75rem;margin:.3rem 0 0}
   .resumen{color:var(--gris);font-size:.85rem;margin:.9rem 0 .2rem}
   .resumen strong{color:var(--tinta);font-weight:600}
 </style>
@@ -137,6 +138,11 @@
       <option value="MP">MP — materia prima</option>
     </select>
 
+    <div id="p-etapa-caja" hidden>
+      <label for="p-etapa">Etapa</label>
+      <input id="p-etapa" autocomplete="off" placeholder="En qué parte del proceso está">
+    </div>
+
     <label for="p-origen">Origen</label>
     <select id="p-origen">
       <option value="fabricado">Fabricado</option>
@@ -146,6 +152,12 @@
 
     <label for="p-pos">Posición</label>
     <input id="p-pos" autocomplete="off" placeholder="Ej.: D3">
+
+    <div id="p-familia-caja" hidden>
+      <label for="p-familia">Familia: códigos que cubre la X</label>
+      <input id="p-familia" autocomplete="off" placeholder="Ej.: CUE-61311, CUE-61321">
+      <p class="ayuda">Separados por coma o espacio.</p>
+    </div>
 
     <button class="enviar" id="p-guardar">Dar de alta</button>
     <div id="p-aviso"></div>
@@ -275,6 +287,15 @@ $('m-guardar').onclick = async () => {
 };
 
 // ---------- alta de producto ----------
+// etapa: solo para SE. familia: solo para códigos con X (comodín de familia).
+const tieneX = () => $('p-codigo').value.toUpperCase().includes('X');
+function camposCondicionales(){
+  $('p-etapa-caja').hidden   = $('p-tipo').value !== 'SE';
+  $('p-familia-caja').hidden = !tieneX();
+}
+$('p-tipo').onchange  = camposCondicionales;
+$('p-codigo').oninput = camposCondicionales;
+
 $('p-guardar').onclick = async () => {
   const b = $('p-guardar');
   b.disabled = true;
@@ -283,13 +304,18 @@ $('p-guardar').onclick = async () => {
     descripcion: $('p-desc').value.trim(),
     tipo:        $('p-tipo').value,
     origen:      $('p-origen').value,
-    posicion:    $('p-pos').value.trim() || null
+    posicion:    $('p-pos').value.trim() || null,
+    etapa:       $('p-tipo').value === 'SE' ? ($('p-etapa').value.trim() || null) : null,
+    familia:     tieneX()
+      ? [...new Set($('p-familia').value.toUpperCase().split(/[\s,;]+/).filter(Boolean))]
+      : null
   });
   b.disabled = false;
 
   if (error) { avisar('p-aviso', 'La base lo rechazó:\n' + error.message, false); return; }
   avisar('p-aviso', 'Producto dado de alta.', true);
-  $('p-codigo').value = ''; $('p-desc').value = ''; $('p-pos').value = '';
+  ['p-codigo','p-desc','p-pos','p-etapa','p-familia'].forEach(id => $(id).value = '');
+  camposCondicionales();
   cargarStock();
 };
 
