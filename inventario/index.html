@@ -73,6 +73,10 @@
   .aviso.ok{background:#E6EFEC;color:var(--accion)}
   .aviso.mal{background:#F6E7E6;color:var(--alarma)}
   .vacio{color:var(--gris);padding:2rem 0;text-align:center;font-size:.9rem}
+  .sentido{font-size:.8rem;margin:.35rem 0 0;font-weight:600}
+  .sentido.entra{color:var(--accion)}
+  .sentido.sale{color:var(--alarma)}
+  .ayuda{color:var(--gris);font-size:.75rem;margin:.3rem 0 0}
   .resumen{color:var(--gris);font-size:.85rem;margin:.9rem 0 .2rem}
   .resumen strong{color:var(--tinta);font-weight:600}
 </style>
@@ -105,19 +109,11 @@
     <input id="m-fecha" type="date">
 
     <label for="m-motivo">Motivo</label>
-    <select id="m-motivo">
-      <option value="INGRESO_PRODUCCIÓN">Ingreso de producción</option>
-      <option value="COMPRA">Compra</option>
-      <option value="INGRESO_TERCEROS">Ingreso de terceros</option>
-      <option value="CONSUMO_PRODUCCIÓN">Consumo de producción</option>
-      <option value="TRASLADO_OTRO_DEPÓSITO">Traslado a otro depósito</option>
-      <option value="ROTURA_BAJA">Rotura o baja</option>
-      <option value="CHATARRA">Chatarra</option>
-      <option value="SALIDA_TERCEROS">Salida a terceros</option>
-    </select>
+    <select id="m-motivo"><option value="">Cargando…</option></select>
+    <p id="m-sentido" class="sentido"></p>
 
-    <label for="m-cant">Cantidad (negativa si sale)</label>
-    <input id="m-cant" type="number" inputmode="numeric" step="1" placeholder="Ej.: 50 o -12">
+    <label for="m-cant">Cantidad</label>
+    <input id="m-cant" type="number" inputmode="numeric" min="1" step="1" placeholder="Ej.: 50">
 
     <label for="m-nota">Nota (opcional)</label>
     <input id="m-nota" autocomplete="off">
@@ -136,12 +132,32 @@
 
     <label for="p-tipo">Tipo</label>
     <select id="p-tipo">
-      <option>COR</option><option>SE</option>
-      <option>ACC-F</option><option>ACC-C</option><option>MP</option>
+      <option value="COR">COR — corte</option>
+      <option value="SE">SE — semielaborado</option>
+      <option value="ACC">ACC — accesorio</option>
+      <option value="MP">MP — materia prima</option>
+    </select>
+
+    <div id="p-etapa-caja" hidden>
+      <label for="p-etapa">Etapa</label>
+      <input id="p-etapa" autocomplete="off" placeholder="En qué parte del proceso está">
+    </div>
+
+    <label for="p-origen">Origen</label>
+    <select id="p-origen">
+      <option value="fabricado">Fabricado</option>
+      <option value="comprado">Comprado</option>
+      <option value="importado">Importado</option>
     </select>
 
     <label for="p-pos">Posición</label>
     <input id="p-pos" autocomplete="off" placeholder="Ej.: D3">
+
+    <div id="p-familia-caja" hidden>
+      <label for="p-familia">Familia: códigos que cubre la X</label>
+      <input id="p-familia" autocomplete="off" placeholder="Ej.: CUE-61311, CUE-61321">
+      <p class="ayuda">Separados por coma o espacio.</p>
+    </div>
 
     <button class="enviar" id="p-guardar">Dar de alta</button>
     <div id="p-aviso"></div>
@@ -213,6 +229,31 @@ function pintar(){
 }
 $('buscar').oninput = pintar;
 
+// ---------- motivos (tabla motivos: el signo lo define la base) ----------
+let motivos = [];
+async function cargarMotivos(){
+  const { data, error } = await db.from('motivos').select('*');
+  if (error) {
+    $('m-motivo').innerHTML = '<option value="">Sin motivos</option>';
+    avisar('m-aviso', 'No se pudieron leer los motivos:\n' + error.message, false);
+    return;
+  }
+  // Entradas primero, después salidas; dentro de cada grupo, alfabético.
+  motivos = data.sort((a, b) => b.signo - a.signo || a.codigo.localeCompare(b.codigo));
+  const nombre = c => c.charAt(0) + c.slice(1).toLowerCase().replaceAll('_', ' ');
+  $('m-motivo').innerHTML = motivos
+    .map(m => `<option value="${m.codigo}">${nombre(m.codigo)}</option>`)
+    .join('');
+  mostrarSentido();
+}
+function mostrarSentido(){
+  const m = motivos.find(x => x.codigo === $('m-motivo').value);
+  const el = $('m-sentido');
+  el.className = 'sentido' + (m ? (m.signo > 0 ? ' entra' : ' sale') : '');
+  el.textContent = m ? (m.signo > 0 ? '↑ Entra al stock' : '↓ Sale del stock') : '';
+}
+$('m-motivo').onchange = mostrarSentido;
+
 // ---------- avisos ----------
 function avisar(donde, texto, ok){
   $(donde).innerHTML = `<div class="aviso ${ok ? 'ok' : 'mal'}">${texto}</div>`;
@@ -222,12 +263,18 @@ function avisar(donde, texto, ok){
 $('m-fecha').value = new Date().toISOString().slice(0, 10);
 
 $('m-guardar').onclick = async () => {
+  // Cortesía: la base es la que valida de verdad.
+  const cant = Number($('m-cant').value);
+  if (!Number.isInteger(cant) || cant <= 0) {
+    avisar('m-aviso', 'La cantidad tiene que ser un número entero mayor que cero.', false);
+    return;
+  }
   const b = $('m-guardar');
   b.disabled = true;
   const { error } = await db.from('movimientos').insert({
     producto: $('m-prod').value,
     fecha:    $('m-fecha').value,
-    cantidad: Number($('m-cant').value),
+    cantidad: cant,
     motivo:   $('m-motivo').value,
     nota:     $('m-nota').value || null
   });
@@ -240,6 +287,15 @@ $('m-guardar').onclick = async () => {
 };
 
 // ---------- alta de producto ----------
+// etapa: solo para SE. familia: solo para códigos con X (comodín de familia).
+const tieneX = () => $('p-codigo').value.toUpperCase().includes('X');
+function camposCondicionales(){
+  $('p-etapa-caja').hidden   = $('p-tipo').value !== 'SE';
+  $('p-familia-caja').hidden = !tieneX();
+}
+$('p-tipo').onchange  = camposCondicionales;
+$('p-codigo').oninput = camposCondicionales;
+
 $('p-guardar').onclick = async () => {
   const b = $('p-guardar');
   b.disabled = true;
@@ -247,17 +303,24 @@ $('p-guardar').onclick = async () => {
     codigo:      $('p-codigo').value.trim(),
     descripcion: $('p-desc').value.trim(),
     tipo:        $('p-tipo').value,
-    posicion:    $('p-pos').value.trim() || null
+    origen:      $('p-origen').value,
+    posicion:    $('p-pos').value.trim() || null,
+    etapa:       $('p-tipo').value === 'SE' ? ($('p-etapa').value.trim() || null) : null,
+    familia:     tieneX()
+      ? [...new Set($('p-familia').value.toUpperCase().split(/[\s,;]+/).filter(Boolean))]
+      : null
   });
   b.disabled = false;
 
   if (error) { avisar('p-aviso', 'La base lo rechazó:\n' + error.message, false); return; }
   avisar('p-aviso', 'Producto dado de alta.', true);
-  $('p-codigo').value = ''; $('p-desc').value = ''; $('p-pos').value = '';
+  ['p-codigo','p-desc','p-pos','p-etapa','p-familia'].forEach(id => $(id).value = '');
+  camposCondicionales();
   cargarStock();
 };
 
 cargarStock();
+cargarMotivos();
 </script>
 </body>
 </html>

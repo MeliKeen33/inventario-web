@@ -202,7 +202,8 @@ un framework, planteálo y explicá qué se gana; no lo introduzcas de costado.
 ## Convenciones
 
 - Todo en español: nombres de tablas, columnas, variables y textos de pantalla.
-- Cantidades: entero con signo. Positivo entra, negativo sale.
+- Cantidades: la aplicación manda siempre positivo. El signo lo aplica el
+  trigger aplicar_signo según el motivo. En la base quedan guardadas con signo.
 - Las pantallas de planta se diseñan para una mano, con guantes y poca luz.
   Pocos botones, grandes, alto contraste.
 - Los errores de la base se muestran al usuario tal como vienen. Que se vea
