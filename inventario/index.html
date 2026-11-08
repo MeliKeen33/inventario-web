@@ -825,7 +825,7 @@ $('n-guardar').onclick = async () => {
       origen:      $('n-origen').value,
       posicion:    $('n-pos').value.trim() || null,
       etapa:       c.tipo === 'SE' ? ($('n-etapa').value.trim() || null) : null,
-      familia:     tieneX(codigo) ? leerFamilia('n-familia') : null,
+      familia:     tieneX(codigo) ? leerFamilia('n-familia') : [],   // columna not null: siempre array
     },
     p_composicion:   compNueva.leer(),
     p_stock_inicial: stock > 0 ? stock : null,
@@ -931,7 +931,7 @@ $('e-guardar').onclick = async () => {
       origen:      $('e-origen').value,
       posicion:    $('e-pos').value.trim() || null,
       etapa:       f.tipo === 'SE' ? ($('e-etapa').value.trim() || null) : null,
-      familia:     tieneX(f.codigo) ? leerFamilia('e-familia') : null,
+      familia:     tieneX(f.codigo) ? leerFamilia('e-familia') : [],   // columna not null: siempre array
       activo:      $('e-activo').checked,
     },
     p_composicion: compEdit.leer(),
