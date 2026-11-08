@@ -86,6 +86,39 @@
     color:var(--tinta);border-radius:3px;font:inherit;font-size:.85rem;cursor:pointer}
   .salir:focus-visible{outline:2px solid var(--accion);outline-offset:2px}
   [hidden]{display:none !important}
+  /* Producto nuevo / editar */
+  fieldset{border:0;margin:0;padding:0}
+  legend{font-size:.95rem;font-weight:600;margin:0 0 .6rem;padding:0}
+  .opciones{display:grid;gap:.4rem}
+  .opciones label{display:flex;align-items:center;gap:.6rem;margin:0;padding:.75rem;
+    background:var(--campo);border:1px solid var(--linea);border-radius:3px;
+    color:var(--tinta);font-size:.95rem;cursor:pointer}
+  .opciones label:has(input:checked){border-color:var(--tinta);box-shadow:inset 0 0 0 1px var(--tinta)}
+  .opciones input{width:auto;margin:0}
+  .opciones small{color:var(--gris);font-size:.75rem;margin-left:auto;text-align:right}
+  .check{display:flex;align-items:center;gap:.5rem;color:var(--tinta);font-size:.9rem;margin:.9rem 0 0;cursor:pointer}
+  .check input{width:auto;margin:0}
+  .req{color:var(--alarma)}
+  .separador{border:0;border-top:1px solid var(--linea);margin:1.5rem 0 .5rem}
+  .comp-agregar{display:flex;gap:.4rem}
+  .comp-agregar input{flex:1}
+  .boton2{padding:.6rem .9rem;border:1px solid var(--linea);background:var(--campo);color:var(--tinta);
+    border-radius:3px;font:inherit;font-size:.9rem;cursor:pointer;white-space:nowrap}
+  .boton2:focus-visible{outline:2px solid var(--accion);outline-offset:2px}
+  .boton2.peligro{color:var(--alarma);border-color:var(--alarma)}
+  .comp-fila{display:flex;align-items:center;gap:.6rem;padding:.55rem 0;border-bottom:1px solid var(--linea)}
+  .comp-fila .texto{flex:1;min-width:0;font-size:.9rem}
+  .comp-fila .texto small{display:block;color:var(--gris);font-size:.75rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .comp-fila input{width:4.5rem;padding:.5rem;text-align:right}
+  .comp-vacia{color:var(--gris);font-size:.85rem;padding:.6rem 0}
+  .resultado{display:block;width:100%;text-align:left;padding:.7rem 0;border:0;border-bottom:1px solid var(--linea);
+    background:none;font:inherit;color:var(--tinta);cursor:pointer}
+  .resultado small{display:block;color:var(--gris);font-size:.8rem}
+  .etiqueta{display:inline-block;font-size:.7rem;color:var(--alarma);border:1px solid var(--alarma);
+    border-radius:2px;padding:0 .3rem;margin-left:.4rem;vertical-align:middle}
+  .ficha-cod{font-size:1.3rem;font-weight:600;letter-spacing:-.01em;margin:1.25rem 0 0}
+  .ficha-tipo{color:var(--gris);font-size:.85rem;margin:.1rem 0 0}
+  .acciones{display:flex;gap:.5rem;margin-top:1rem}
   .resumen{color:var(--gris);font-size:.85rem;margin:.9rem 0 .2rem}
   .resumen strong{color:var(--tinta);font-weight:600}
 </style>
@@ -125,6 +158,7 @@
     <button id="t-stock" aria-selected="true">Stock</button>
     <button id="t-mov"   aria-selected="false">Movimiento</button>
     <button id="t-prod"  aria-selected="false">Producto nuevo</button>
+    <button id="t-edit"  aria-selected="false">Editar producto</button>
   </nav>
 
   <!-- ====== STOCK ====== -->
@@ -156,46 +190,142 @@
     <div id="m-aviso"></div>
   </section>
 
-  <!-- ====== PRODUCTO ====== -->
+  <!-- ====== PRODUCTO NUEVO (admin) ====== -->
   <section id="p-prod" hidden>
-    <label for="p-codigo">Código</label>
-    <input id="p-codigo" autocomplete="off" placeholder="Ej.: D430-15806">
+    <fieldset>
+      <legend>¿Qué estás dando de alta?</legend>
+      <div class="opciones" id="n-opciones">
+        <label><input type="radio" name="n-opcion" value="geometrico"> Corte geométrico <small>COR · código a mano</small></label>
+        <label><input type="radio" name="n-opcion" value="figura"> Figura <small>COR · código generado</small></label>
+        <label><input type="radio" name="n-opcion" value="se"> Semielaborado <small>SE · código generado</small></label>
+        <label><input type="radio" name="n-opcion" value="acc"> Accesorio <small>ACC · código a mano</small></label>
+        <label><input type="radio" name="n-opcion" value="mp"> Materia prima <small>MP · código a mano</small></label>
+      </div>
+    </fieldset>
 
-    <label for="p-desc">Descripción</label>
-    <input id="p-desc" autocomplete="off">
+    <div id="n-form" hidden>
+      <hr class="separador">
 
-    <label for="p-tipo">Tipo</label>
-    <select id="p-tipo">
-      <option value="COR">COR — corte</option>
-      <option value="SE">SE — semielaborado</option>
-      <option value="ACC">ACC — accesorio</option>
-      <option value="MP">MP — materia prima</option>
-    </select>
+      <!-- Generador: solo Figura y Semielaborado -->
+      <div id="n-gen" hidden>
+        <div id="n-pref-caja" hidden>
+          <label for="n-pref">Pieza</label>
+          <select id="n-pref">
+            <option value="CUE">CUE — cuerpo</option>
+            <option value="DES">DES — desarrollo</option>
+            <option value="TAP">TAP — tapa</option>
+            <option value="ARO">ARO — aro</option>
+            <option value="FON">FON — fondo</option>
+            <option value="BAS">BAS — base</option>
+          </select>
+        </div>
 
-    <div id="p-etapa-caja" hidden>
-      <label for="p-etapa">Etapa</label>
-      <input id="p-etapa" autocomplete="off" placeholder="En qué parte del proceso está">
+        <label for="n-pt">Producto terminado <span class="req">*</span></label>
+        <input id="n-pt" list="dl-pt" autocomplete="off" placeholder="Código del producto terminado">
+
+        <label class="check" id="n-otra-caja" hidden>
+          <input type="checkbox" id="n-otra"> Es otra figura del mismo producto terminado
+        </label>
+      </div>
+
+      <label for="n-codigo">Código <span class="req">*</span></label>
+      <input id="n-codigo" autocomplete="off">
+      <p class="ayuda" id="n-cod-ayuda"></p>
+      <div id="n-cod-error"></div>
+
+      <label for="n-desc">Descripción <span class="req">*</span></label>
+      <input id="n-desc" autocomplete="off">
+
+      <label for="n-origen">Origen <span class="req">*</span></label>
+      <select id="n-origen">
+        <option value="">Elegí el origen…</option>
+        <option value="fabricado">Fabricado</option>
+        <option value="comprado">Comprado</option>
+        <option value="importado">Importado</option>
+      </select>
+
+      <label for="n-pos">Posición</label>
+      <input id="n-pos" autocomplete="off" placeholder="Ej.: D3">
+
+      <div id="n-etapa-caja" hidden>
+        <label for="n-etapa">Etapa</label>
+        <input id="n-etapa" autocomplete="off" placeholder="En qué parte del proceso está">
+      </div>
+
+      <div id="n-familia-caja" hidden>
+        <label for="n-familia">Familia: códigos que cubre la X</label>
+        <input id="n-familia" autocomplete="off" placeholder="Ej.: CUE-61311, CUE-61321">
+        <p class="ayuda">Separados por coma o espacio.</p>
+      </div>
+
+      <label for="n-stock">Stock inicial</label>
+      <input id="n-stock" type="number" inputmode="numeric" min="0" step="1" placeholder="0">
+      <p class="ayuda">Si es mayor que cero se registra un movimiento STOCK_INICIAL con fecha de hoy.</p>
+
+      <label for="n-comp-pt">Productos terminados asociados <span class="req" id="n-comp-req" hidden>*</span></label>
+      <div class="comp-agregar">
+        <input id="n-comp-pt" list="dl-pt" autocomplete="off" placeholder="Código del producto terminado">
+        <button type="button" class="boton2" id="n-comp-add">Agregar</button>
+      </div>
+      <div id="n-comp-lista"></div>
+
+      <button class="enviar" id="n-guardar">Dar de alta</button>
+      <div id="n-aviso"></div>
     </div>
-
-    <label for="p-origen">Origen</label>
-    <select id="p-origen">
-      <option value="fabricado">Fabricado</option>
-      <option value="comprado">Comprado</option>
-      <option value="importado">Importado</option>
-    </select>
-
-    <label for="p-pos">Posición</label>
-    <input id="p-pos" autocomplete="off" placeholder="Ej.: D3">
-
-    <div id="p-familia-caja" hidden>
-      <label for="p-familia">Familia: códigos que cubre la X</label>
-      <input id="p-familia" autocomplete="off" placeholder="Ej.: CUE-61311, CUE-61321">
-      <p class="ayuda">Separados por coma o espacio.</p>
-    </div>
-
-    <button class="enviar" id="p-guardar">Dar de alta</button>
-    <div id="p-aviso"></div>
   </section>
+
+  <!-- ====== EDITAR PRODUCTO (admin) ====== -->
+  <section id="p-edit" hidden>
+    <input id="e-buscar" placeholder="Buscar por código o descripción" autocomplete="off">
+    <div id="e-resultados"></div>
+
+    <div id="e-ficha" hidden>
+      <p class="ficha-cod" id="e-codigo"></p>
+      <p class="ficha-tipo" id="e-tipo"></p>
+
+      <label for="e-desc">Descripción <span class="req">*</span></label>
+      <input id="e-desc" autocomplete="off">
+
+      <label for="e-origen">Origen <span class="req">*</span></label>
+      <select id="e-origen">
+        <option value="fabricado">Fabricado</option>
+        <option value="comprado">Comprado</option>
+        <option value="importado">Importado</option>
+      </select>
+
+      <label for="e-pos">Posición</label>
+      <input id="e-pos" autocomplete="off">
+
+      <div id="e-etapa-caja" hidden>
+        <label for="e-etapa">Etapa</label>
+        <input id="e-etapa" autocomplete="off">
+      </div>
+
+      <div id="e-familia-caja" hidden>
+        <label for="e-familia">Familia: códigos que cubre la X</label>
+        <input id="e-familia" autocomplete="off">
+        <p class="ayuda">Separados por coma o espacio.</p>
+      </div>
+
+      <label class="check"><input type="checkbox" id="e-activo"> Activo</label>
+
+      <label for="e-comp-pt">Productos terminados asociados <span class="req" id="e-comp-req" hidden>*</span></label>
+      <div class="comp-agregar">
+        <input id="e-comp-pt" list="dl-pt" autocomplete="off" placeholder="Código del producto terminado">
+        <button type="button" class="boton2" id="e-comp-add">Agregar</button>
+      </div>
+      <div id="e-comp-lista"></div>
+
+      <button class="enviar" id="e-guardar">Guardar cambios</button>
+      <div class="acciones">
+        <button type="button" class="boton2" id="e-volver">Volver a buscar</button>
+        <button type="button" class="boton2 peligro" id="e-eliminar">Eliminar producto</button>
+      </div>
+      <div id="e-aviso"></div>
+    </div>
+  </section>
+
+  <datalist id="dl-pt"></datalist>
 
   </div><!-- /app -->
 
@@ -219,10 +349,10 @@ let filas = [];
 
 // ---------- pestañas según rol ----------
 // Esto solo arma la pantalla: lo que cada rol puede hacer lo bloquea la base con RLS.
-const tabs = [['t-stock','p-stock'],['t-mov','p-mov'],['t-prod','p-prod']];
+const tabs = [['t-stock','p-stock'],['t-mov','p-mov'],['t-prod','p-prod'],['t-edit','p-edit']];
 const PERMISOS = {
   planta:   ['t-stock', 't-mov'],
-  admin:    ['t-stock', 't-mov', 't-prod'],
+  admin:    ['t-stock', 't-mov', 't-prod', 't-edit'],
   gerencia: ['t-stock'],
 };
 const NOMBRE_ROL = { planta: 'Planta', admin: 'Administración', gerencia: 'Gerencia' };
@@ -235,6 +365,8 @@ function abrir(bot){
     $(p).hidden = b !== bot;
   });
   if (bot === 't-stock') cargarStock();
+  if (bot === 't-prod' || bot === 't-edit') cargarTerminados();
+  if (bot === 't-edit') cargarProductos();
 }
 tabs.forEach(([bot]) => $(bot).onclick = () => abrir(bot));
 
@@ -318,7 +450,8 @@ function avisar(donde, texto, ok){
 }
 
 // ---------- alta de movimiento ----------
-$('m-fecha').value = new Date().toISOString().slice(0, 10);
+const hoy = () => new Date().toLocaleDateString('en-CA');   // AAAA-MM-DD, hora local
+$('m-fecha').value = hoy();
 
 $('m-guardar').onclick = async () => {
   // Cortesía: la base es la que valida de verdad.
@@ -344,38 +477,364 @@ $('m-guardar').onclick = async () => {
   cargarStock();
 };
 
-// ---------- alta de producto ----------
-// etapa: solo para SE. familia: solo para códigos con X (comodín de familia).
-const tieneX = () => $('p-codigo').value.toUpperCase().includes('X');
-function camposCondicionales(){
-  $('p-etapa-caja').hidden   = $('p-tipo').value !== 'SE';
-  $('p-familia-caja').hidden = !tieneX();
-}
-$('p-tipo').onchange  = camposCondicionales;
-$('p-codigo').oninput = camposCondicionales;
+// ---------- utilidades de producto ----------
+const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const tieneX = codigo => codigo.toUpperCase().includes('X');
+const leerFamilia = id => [...new Set($(id).value.toUpperCase().split(/[\s,;]+/).filter(Boolean))];
+const ORIGENES = ['fabricado', 'comprado', 'importado'];
 
-$('p-guardar').onclick = async () => {
-  const b = $('p-guardar');
+// Productos terminados: alimentan el generador y la composición.
+let terminados = [];
+async function cargarTerminados(){
+  const { data, error } = await db.from('productos_terminados').select('*').order('codigo');
+  if (error) { avisar('n-aviso', 'No se pudieron leer los productos terminados:\n' + error.message, false); return; }
+  terminados = data;
+  $('dl-pt').innerHTML = data
+    .map(t => `<option value="${esc(t.codigo)}">${esc(t.descripcion ?? '')}</option>`).join('');
+}
+const buscarPT = codigo => terminados.find(t => t.codigo === codigo.trim());
+
+// ---------- composición (mismo componente en alta y edición) ----------
+function crearComposicion(prefijo){
+  let items = [];   // [{producto_terminado, cantidad}]
+  const lista = $(prefijo + '-comp-lista');
+
+  function pintarComp(){
+    lista.innerHTML = items.length === 0
+      ? '<p class="comp-vacia">Ninguno asociado.</p>'
+      : items.map((it, i) => {
+          const pt = buscarPT(it.producto_terminado);
+          return `<div class="comp-fila">
+            <div class="texto">${esc(it.producto_terminado)}<small>${esc(pt?.descripcion ?? '')}</small></div>
+            <input type="number" inputmode="numeric" min="1" step="1" value="${it.cantidad}"
+                   data-i="${i}" aria-label="Cantidad de ${esc(it.producto_terminado)}">
+            <button type="button" class="boton2" data-quitar="${i}">Quitar</button>
+          </div>`;
+        }).join('');
+  }
+  lista.addEventListener('input', e => {
+    const i = e.target.dataset.i;
+    if (i !== undefined) items[i].cantidad = Number(e.target.value);
+  });
+  lista.addEventListener('click', e => {
+    const i = e.target.dataset.quitar;
+    if (i !== undefined) { items.splice(Number(i), 1); pintarComp(); }
+  });
+
+  function agregar(codigo){
+    codigo = codigo.trim();
+    if (!buscarPT(codigo)) return false;
+    if (!items.some(it => it.producto_terminado === codigo)) items.push({ producto_terminado: codigo, cantidad: 1 });
+    pintarComp();
+    return true;
+  }
+  $(prefijo + '-comp-add').onclick = () => {
+    const campo = $(prefijo + '-comp-pt');
+    if (!campo.value.trim()) return;
+    if (agregar(campo.value)) campo.value = '';
+    else avisar(prefijo + '-aviso', `"${campo.value}" no está en la lista de productos terminados.`, false);
+  };
+
+  return {
+    agregar,
+    quitar: codigo => { items = items.filter(it => it.producto_terminado !== codigo); pintarComp(); },
+    tiene:  codigo => items.some(it => it.producto_terminado === codigo),
+    poner:  nuevos => {
+      items = nuevos.map(it => ({ producto_terminado: it.producto_terminado, cantidad: it.cantidad }));
+      pintarComp();
+    },
+    leer:   () => items.map(it => ({ ...it })),
+    // Cortesía: la base vuelve a validar.
+    error:  obligatorio => {
+      if (obligatorio && items.length === 0) return 'Asociá al menos un producto terminado.';
+      if (items.some(it => !Number.isInteger(it.cantidad) || it.cantidad < 1))
+        return 'Las cantidades de la composición tienen que ser enteros mayores que cero.';
+      return null;
+    },
+  };
+}
+const compNueva = crearComposicion('n');
+const compEdit  = crearComposicion('e');
+
+// ---------- PRODUCTO NUEVO ----------
+// Cada opción define tipo, si el código se genera y si la composición es obligatoria.
+const OPCIONES = {
+  geometrico: { tipo: 'COR', genera: false, ejemplo: 'Ej.: D430-15806' },
+  figura:     { tipo: 'COR', genera: true },
+  se:         { tipo: 'SE',  genera: true },
+  acc:        { tipo: 'ACC', genera: false, ejemplo: '' },
+  mp:         { tipo: 'MP',  genera: false, ejemplo: '' },
+};
+const opcion = () => document.querySelector('input[name="n-opcion"]:checked')?.value;
+const conf   = () => OPCIONES[opcion()];
+
+function limpiarAlta(){
+  ['n-pt','n-codigo','n-desc','n-pos','n-etapa','n-familia','n-stock','n-comp-pt']
+    .forEach(id => $(id).value = '');
+  $('n-origen').value = '';
+  $('n-otra').checked = false;
+  $('n-cod-error').innerHTML = '';
+  ptGenerador = null;
+  compNueva.poner([]);
+}
+
+$('n-opciones').onchange = () => {
+  const c = conf();
+  limpiarAlta();
+  $('n-form').hidden = false;
+  $('n-gen').hidden = !c.genera;
+  $('n-pref-caja').hidden = opcion() !== 'se';
+  $('n-otra-caja').hidden = opcion() !== 'figura';
+  $('n-etapa-caja').hidden = c.tipo !== 'SE';
+  $('n-comp-req').hidden = !c.genera;
+  $('n-codigo').placeholder = c.genera ? 'Se arma al elegir el producto terminado' : (c.ejemplo ?? '');
+  $('n-cod-ayuda').textContent = c.genera
+    ? (opcion() === 'figura' ? 'F + código del producto terminado, sin guión. Podés editarlo.'
+                             : 'Pieza + guión + código del producto terminado. Podés editarlo.')
+    : '';
+  $('n-aviso').innerHTML = '';
+  condicionalesAlta();
+};
+
+function condicionalesAlta(){
+  $('n-familia-caja').hidden = !tieneX($('n-codigo').value);
+}
+
+// El producto terminado del generador entra solo a la composición.
+let ptGenerador = null;
+async function generarCodigo(){
+  const pt = buscarPT($('n-pt').value);
+  if (ptGenerador && ptGenerador !== pt?.codigo) compNueva.quitar(ptGenerador);
+  ptGenerador = pt?.codigo ?? null;
+  if (!pt) return;
+  if (!compNueva.tiene(pt.codigo)) compNueva.agregar(pt.codigo);
+
+  const base = pt.codigo.replaceAll('-', '');
+  let codigo;
+  if (opcion() === 'se') {
+    codigo = `${$('n-pref').value}-${pt.codigo}`;
+  } else if ($('n-otra').checked) {
+    codigo = await siguienteCorrelativo(base);
+    if (!codigo) return;
+  } else {
+    codigo = 'F' + base;
+  }
+  $('n-codigo').value = codigo;
+  condicionalesAlta();
+  verificarCodigo();
+}
+
+// F9343901, F9343902…: el siguiente que no esté usado.
+async function siguienteCorrelativo(base){
+  const { data, error } = await db.from('productos').select('codigo').like('codigo', `F${base}__`);
+  if (error) { avisar('n-cod-error', 'No se pudo calcular el correlativo:\n' + error.message, false); return null; }
+  const patron = new RegExp(`^F${base}(\\d{2})$`);
+  const usados = data.map(f => f.codigo.match(patron)?.[1]).filter(Boolean).map(Number);
+  const siguiente = (usados.length ? Math.max(...usados) : 0) + 1;
+  if (siguiente > 99) { avisar('n-cod-error', 'Ya están usados los 99 correlativos de este producto terminado.', false); return null; }
+  return `F${base}${String(siguiente).padStart(2, '0')}`;
+}
+
+$('n-pt').oninput   = generarCodigo;
+$('n-pref').onchange = generarCodigo;
+$('n-otra').onchange = generarCodigo;
+
+// Aviso temprano de código repetido. La clave primaria lo rechaza igual.
+let ultimoChequeo = 0;
+async function codigoExiste(codigo){
+  const { data } = await db.from('productos').select('codigo').eq('codigo', codigo).maybeSingle();
+  return !!data;
+}
+async function verificarCodigo(){
+  const codigo = $('n-codigo').value.trim();
+  const n = ++ultimoChequeo;
+  $('n-cod-error').innerHTML = '';
+  if (!codigo) return false;
+  const existe = await codigoExiste(codigo);
+  if (n !== ultimoChequeo) return false;   // llegó una respuesta vieja
+  if (existe) {
+    const extra = opcion() === 'figura' && !$('n-otra').checked
+      ? '\nSi es otra figura del mismo producto terminado, marcá la casilla de arriba.' : '';
+    avisar('n-cod-error', 'Ese código ya existe, el producto ya está dado de alta.' + extra, false);
+  }
+  return existe;
+}
+let esperaCodigo;
+$('n-codigo').oninput = () => {
+  condicionalesAlta();
+  clearTimeout(esperaCodigo);
+  esperaCodigo = setTimeout(verificarCodigo, 350);
+};
+
+$('n-guardar').onclick = async () => {
+  const c = conf();
+  const codigo = $('n-codigo').value.trim();
+  const stockTxt = $('n-stock').value.trim();
+  const stock = stockTxt === '' ? 0 : Number(stockTxt);
+
+  const falta =
+      !codigo                           ? 'Falta el código.'
+    : !$('n-desc').value.trim()         ? 'Falta la descripción.'
+    : !ORIGENES.includes($('n-origen').value) ? 'Elegí el origen.'
+    : !Number.isInteger(stock) || stock < 0   ? 'El stock inicial tiene que ser un entero, cero o mayor.'
+    : compNueva.error(c.genera);
+  if (falta) { avisar('n-aviso', falta, false); return; }
+
+  const b = $('n-guardar');
   b.disabled = true;
-  const { error } = await db.from('productos').insert({
-    codigo:      $('p-codigo').value.trim(),
-    descripcion: $('p-desc').value.trim(),
-    tipo:        $('p-tipo').value,
-    origen:      $('p-origen').value,
-    posicion:    $('p-pos').value.trim() || null,
-    etapa:       $('p-tipo').value === 'SE' ? ($('p-etapa').value.trim() || null) : null,
-    familia:     tieneX()
-      ? [...new Set($('p-familia').value.toUpperCase().split(/[\s,;]+/).filter(Boolean))]
-      : null
+  if (await verificarCodigo()) { b.disabled = false; avisar('n-aviso', 'Ese código ya existe, el producto ya está dado de alta.', false); return; }
+
+  // Una sola transacción en la base: producto + composición + stock inicial.
+  const { error } = await db.rpc('alta_producto', {
+    p_producto: {
+      codigo,
+      descripcion: $('n-desc').value.trim(),
+      tipo:        c.tipo,
+      origen:      $('n-origen').value,
+      posicion:    $('n-pos').value.trim() || null,
+      etapa:       c.tipo === 'SE' ? ($('n-etapa').value.trim() || null) : null,
+      familia:     tieneX(codigo) ? leerFamilia('n-familia') : null,
+    },
+    p_composicion:   compNueva.leer(),
+    p_stock_inicial: stock > 0 ? stock : null,
+    p_fecha:         hoy(),
   });
   b.disabled = false;
 
-  if (error) { avisar('p-aviso', 'La base lo rechazó:\n' + error.message, false); return; }
-  avisar('p-aviso', 'Producto dado de alta.', true);
-  ['p-codigo','p-desc','p-pos','p-etapa','p-familia'].forEach(id => $(id).value = '');
-  camposCondicionales();
+  if (error) { avisar('n-aviso', 'La base lo rechazó:\n' + error.message, false); return; }
+  avisar('n-aviso', `Producto ${codigo} dado de alta` +
+    (stock > 0 ? ` con ${stock} ${stock === 1 ? 'unidad' : 'unidades'} de stock inicial.` : '.'), true);
+  limpiarAlta();
+  condicionalesAlta();
   cargarStock();
 };
+
+// ---------- EDITAR PRODUCTO ----------
+let productos = [];
+let enFicha = null;   // producto abierto
+
+async function cargarProductos(){
+  const { data, error } = await db.from('productos').select('*').order('codigo');
+  if (error) { $('e-resultados').innerHTML = `<p class="vacio">${esc(error.message)}</p>`; return; }
+  productos = data;
+  if (!enFicha) pintarResultados();
+}
+
+function pintarResultados(){
+  const q = $('e-buscar').value.trim().toLowerCase();
+  if (!q) { $('e-resultados').innerHTML = '<p class="vacio">Escribí un código o una descripción.</p>'; return; }
+  const ver = productos.filter(f => (f.codigo + ' ' + f.descripcion).toLowerCase().includes(q));
+  $('e-resultados').innerHTML = ver.length === 0
+    ? '<p class="vacio">Sin resultados.</p>'
+    : ver.slice(0, 30).map(f => `
+        <button type="button" class="resultado" data-codigo="${esc(f.codigo)}">
+          <strong>${esc(f.codigo)}</strong>${f.activo === false ? '<span class="etiqueta">inactivo</span>' : ''}
+          <small>${esc(f.descripcion)} · ${esc(f.tipo)}</small>
+        </button>`).join('') +
+      (ver.length > 30 ? `<p class="ayuda">Y ${ver.length - 30} más: afiná la búsqueda.</p>` : '');
+}
+$('e-buscar').oninput = () => { cerrarFicha(); pintarResultados(); };
+$('e-resultados').onclick = e => {
+  const boton = e.target.closest('[data-codigo]');
+  if (boton) abrirFicha(boton.dataset.codigo);
+};
+
+async function abrirFicha(codigo){
+  const f = productos.find(x => x.codigo === codigo);
+  if (!f) return;
+  const { data: comp, error } = await db.from('composicion')
+    .select('producto_terminado, cantidad').eq('producto', codigo);
+  if (error) { avisar('e-aviso', 'No se pudo leer la composición:\n' + error.message, false); return; }
+
+  enFicha = f;
+  $('e-resultados').hidden = true;
+  $('e-ficha').hidden = false;
+  $('e-aviso').innerHTML = '';
+  $('e-codigo').textContent = f.codigo;
+  $('e-tipo').textContent = { COR: 'COR — corte', SE: 'SE — semielaborado', ACC: 'ACC — accesorio', MP: 'MP — materia prima' }[f.tipo] ?? f.tipo;
+  $('e-desc').value    = f.descripcion ?? '';
+  $('e-origen').value  = f.origen ?? 'fabricado';
+  $('e-pos').value     = f.posicion ?? '';
+  $('e-etapa').value   = f.etapa ?? '';
+  $('e-familia').value = (f.familia ?? []).join(', ');
+  $('e-activo').checked = f.activo !== false;
+  $('e-etapa-caja').hidden   = f.tipo !== 'SE';
+  $('e-familia-caja').hidden = !tieneX(f.codigo);
+  $('e-comp-req').hidden = !exigeComposicion(f);
+  compEdit.poner(comp);
+}
+// Misma regla que la función exige_composicion de la base.
+const exigeComposicion = f => f.tipo === 'SE' || (f.tipo === 'COR' && /^F[0-9]/.test(f.codigo));
+
+function cerrarFicha(){
+  enFicha = null;
+  $('e-ficha').hidden = true;
+  $('e-resultados').hidden = false;
+}
+$('e-volver').onclick = () => { cerrarFicha(); pintarResultados(); $('e-buscar').focus(); };
+
+$('e-guardar').onclick = async () => {
+  const f = enFicha;
+  const falta =
+      !$('e-desc').value.trim() ? 'Falta la descripción.'
+    : compEdit.error(exigeComposicion(f));
+  if (falta) { avisar('e-aviso', falta, false); return; }
+
+  const b = $('e-guardar');
+  b.disabled = true;
+  // Datos y composición en una sola transacción.
+  const { error } = await db.rpc('editar_producto', {
+    p_codigo: f.codigo,
+    p_cambios: {
+      descripcion: $('e-desc').value.trim(),
+      origen:      $('e-origen').value,
+      posicion:    $('e-pos').value.trim() || null,
+      etapa:       f.tipo === 'SE' ? ($('e-etapa').value.trim() || null) : null,
+      familia:     tieneX(f.codigo) ? leerFamilia('e-familia') : null,
+      activo:      $('e-activo').checked,
+    },
+    p_composicion: compEdit.leer(),
+  });
+  b.disabled = false;
+
+  if (error) { avisar('e-aviso', 'La base lo rechazó:\n' + error.message, false); return; }
+  avisar('e-aviso', 'Cambios guardados.', true);
+  await cargarProductos();
+  enFicha = productos.find(x => x.codigo === f.codigo) ?? f;
+};
+
+$('e-eliminar').onclick = async () => {
+  const f = enFicha;
+  if (!confirm(`¿Eliminar ${f.codigo}? No se puede deshacer.`)) return;
+  const { error } = await db.rpc('eliminar_producto', { p_codigo: f.codigo });
+
+  if (error && /TIENE_MOVIMIENTOS|violates foreign key.*movimientos/i.test(error.message)) {
+    $('e-aviso').innerHTML = `<div class="aviso mal">Este producto tiene movimientos registrados y no se puede eliminar.
+<button type="button" class="boton2" id="e-desactivar" style="margin-top:.6rem">Desactivarlo en su lugar</button></div>`;
+    $('e-desactivar').onclick = desactivar;
+    return;
+  }
+  if (error) { avisar('e-aviso', 'La base lo rechazó:\n' + error.message, false); return; }
+
+  cerrarFicha();
+  await cargarProductos();
+  pintarResultados();
+  $('e-resultados').insertAdjacentHTML('afterbegin', `<div class="aviso ok">Producto ${esc(f.codigo)} eliminado.</div>`);
+};
+
+async function desactivar(){
+  const f = enFicha;
+  const { data, error } = await db.from('productos')
+    .update({ activo: false }).eq('codigo', f.codigo).select('codigo');
+  if (error || !data?.length) {
+    avisar('e-aviso', 'No se pudo desactivar' + (error ? ':\n' + error.message : '.'), false);
+    return;
+  }
+  $('e-activo').checked = false;
+  avisar('e-aviso', `Producto ${f.codigo} desactivado. Sigue en el catálogo, con sus movimientos.`, true);
+  await cargarProductos();
+  enFicha = productos.find(x => x.codigo === f.codigo) ?? f;
+}
 
 // ---------- sesión ----------
 function mostrarLogin(){
@@ -385,6 +844,12 @@ function mostrarLogin(){
   filas = [];
   $('lista').innerHTML = '';
   $('m-prod').innerHTML = '';
+  productos = []; terminados = []; enFicha = null;
+  $('dl-pt').innerHTML = '';
+  $('e-ficha').hidden = true;
+  $('e-resultados').hidden = false;
+  $('e-resultados').innerHTML = '';
+  $('e-buscar').value = '';
 }
 
 let usuarioActual = null;
