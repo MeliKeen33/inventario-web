@@ -108,6 +108,12 @@
   .sug:last-child{border-bottom:0}
   .sug:hover,.sug:focus-visible{background:var(--papel);outline:none}
   .sug small{display:block;color:var(--gris);font-size:.75rem}
+  /* Planta: con guantes, objetivos grandes */
+  .sug.grande{padding:.95rem .9rem;font-size:1rem}
+  .sug.grande small{font-size:.85rem}
+  .elegido{margin:.4rem 0 0;font-size:.9rem;color:var(--tinta)}
+  .elegido strong{font-weight:600}
+  .aviso.incompleto{margin:.9rem 0 .2rem}
   .sugerencias .ayuda,.sugerencias .comp-vacia{padding:.5rem .75rem;margin:0}
   .boton2{padding:.6rem .9rem;border:1px solid var(--linea);background:var(--campo);color:var(--tinta);
     border-radius:3px;font:inherit;font-size:.9rem;cursor:pointer;white-space:nowrap}
@@ -179,7 +185,9 @@
   <!-- ====== MOVIMIENTO ====== -->
   <section id="p-mov" hidden>
     <label for="m-prod">Producto <span class="req" aria-hidden="true">*</span></label>
-    <select id="m-prod"></select>
+    <input id="m-prod" autocomplete="off" placeholder="Buscá por código o descripción">
+    <div class="sugerencias" id="m-prod-sug" hidden></div>
+    <p class="elegido" id="m-elegido" hidden></p>
 
     <label for="m-fecha">Fecha del movimiento <span class="req" aria-hidden="true">*</span></label>
     <input id="m-fecha" type="date">
@@ -388,14 +396,46 @@ function armarPantalla(rol){
 }
 
 // ---------- stock ----------
+// Supabase devuelve como máximo 1000 filas por consulta (o menos, según
+// la configuración del proyecto). Se trae por páginas hasta completar el
+// total que informa la base; si no se llega, no se muestran totales.
+const PAGINA = 1000;
+let stockIncompleto = null;   // null = completo; si no, {cargados, total, error}
+let turnoStock = 0;
+
+async function traerStock(){
+  const primera = await db.from('stock').select('*', { count: 'exact' })
+    .order('codigo').range(0, PAGINA - 1);
+  if (primera.error) return { error: primera.error };
+  const total = primera.count;
+  const todas = [...primera.data];
+  // Avanza según lo que llegó, no según PAGINA: funciona aunque el
+  // proyecto tenga un tope menor a 1000.
+  while (total !== null && todas.length < total) {
+    const pag = await db.from('stock').select('*')
+      .order('codigo').range(todas.length, todas.length + PAGINA - 1);
+    if (pag.error) return { filas: todas, total, error: pag.error };
+    if (pag.data.length === 0) break;
+    todas.push(...pag.data);
+  }
+  // Si alguien cargó o borró productos mientras se paginaba, puede haber repetidos.
+  const filasUnicas = [...new Map(todas.map(f => [f.codigo, f])).values()];
+  return { filas: filasUnicas, total };
+}
+
 async function cargarStock(){
-  const { data, error } = await db.from('stock').select('*').order('codigo');
-  if (error) { $('lista').innerHTML = `<p class="vacio">${error.message}</p>`; return; }
-  filas = data;
+  const n = ++turnoStock;
+  let res = await traerStock();
+  // Un reintento si no cerró la cuenta (p. ej. cambió el catálogo en el medio).
+  if (!res.error && res.filas.length !== res.total) res = await traerStock();
+  if (n !== turnoStock) return;
+  if (res.error && !res.filas) { $('lista').innerHTML = `<p class="vacio">${esc(res.error.message)}</p>`; return; }
+
+  filas = res.filas;
+  stockIncompleto = (res.error || res.total === null || filas.length !== res.total)
+    ? { cargados: filas.length, total: res.total, error: res.error }
+    : null;
   pintar();
-  $('m-prod').innerHTML = data
-    .map(f => `<option value="${f.codigo}">${f.codigo} — ${f.descripcion}</option>`)
-    .join('');
 }
 
 function pintar(){
@@ -404,23 +444,33 @@ function pintar(){
     ? filas.filter(f => (f.codigo + ' ' + f.descripcion).toLowerCase().includes(q))
     : filas;
 
-  const unidades = ver.reduce((t, f) => t + (Number(f.stock) || 0), 0);
   const fmt = n => n.toLocaleString('es-AR');
+  if (stockIncompleto) {
+    const { cargados, total, error } = stockIncompleto;
+    $('resumen').innerHTML = `<div class="aviso mal incompleto">No se pudo cargar el stock completo: ` +
+      (total === null ? `se cargaron ${fmt(cargados)} productos y la base no informó el total.`
+                      : `se cargaron ${fmt(cargados)} de ${fmt(total)} productos.`) +
+      ` No se muestran totales porque estarían incompletos.` +
+      (q ? ` La búsqueda solo mira lo que se cargó.` : '') +
+      (error ? `\n${esc(error.message)}` : '') + `</div>`;
+  } else {
+  const unidades = ver.reduce((t, f) => t + (Number(f.stock) || 0), 0);
   $('resumen').innerHTML =
     `<strong>${fmt(ver.length)}</strong> ${ver.length === 1 ? 'producto' : 'productos'}` +
     (q ? ` de ${fmt(filas.length)}` : '') +
     ` · <strong>${fmt(unidades)}</strong> ${unidades === 1 ? 'unidad' : 'unidades'} en total`;
+  }
 
   $('lista').innerHTML = ver.length === 0
     ? '<p class="vacio">Sin resultados.</p>'
     : ver.map(f => `
         <div class="fila">
           <div class="texto">
-            <div class="codigo">${f.codigo}</div>
-            <div class="desc">${f.descripcion}</div>
+            <div class="codigo">${esc(f.codigo)}</div>
+            <div class="desc">${esc(f.descripcion)}</div>
           </div>
-          <div class="cant${f.stock < 0 ? ' negativo' : ''}">${f.stock}</div>
-          <div class="donde">${f.posicion ?? '—'}</div>
+          <div class="cant${f.stock < 0 ? ' negativo' : ''}">${esc(f.stock)}</div>
+          <div class="donde">${esc(f.posicion ?? '—')}</div>
         </div>`).join('');
 }
 $('buscar').oninput = pintar;
@@ -461,6 +511,7 @@ $('m-fecha').value = hoy();
 
 $('m-guardar').onclick = async () => {
   // Cortesía: la base es la que valida de verdad.
+  if (!prodMov) { avisar('m-aviso', 'Elegí el producto de la lista.', false); return; }
   const cant = Number($('m-cant').value);
   if (!Number.isInteger(cant) || cant <= 0) {
     avisar('m-aviso', 'La cantidad tiene que ser un número entero mayor que cero.', false);
@@ -469,7 +520,7 @@ $('m-guardar').onclick = async () => {
   const b = $('m-guardar');
   b.disabled = true;
   const { error } = await db.from('movimientos').insert({
-    producto: $('m-prod').value,
+    producto: prodMov.codigo,
     fecha:    $('m-fecha').value,
     cantidad: cant,
     motivo:   $('m-motivo').value,
@@ -478,8 +529,11 @@ $('m-guardar').onclick = async () => {
   b.disabled = false;
 
   if (error) { avisar('m-aviso', 'La base lo rechazó:\n' + error.message, false); return; }
-  avisar('m-aviso', 'Movimiento registrado.', true);
+  avisar('m-aviso', `Movimiento registrado en ${esc(prodMov.codigo)}.`, true);
   $('m-cant').value = ''; $('m-nota').value = '';
+  // Muestra el stock ya actualizado del producto elegido.
+  const { data } = await db.from('stock').select('*').eq('codigo', prodMov.codigo).maybeSingle();
+  if (data) mostrarElegido(data);
   cargarStock();
 };
 
@@ -501,8 +555,8 @@ function buscarEn(tabla, texto, limite, columnas = '*'){
     .order('codigo').limit(limite + 1);   // +1 para saber si hay más
 }
 
-// Campo de texto que busca productos terminados mientras se escribe.
-function crearBuscadorPT(inputId, alElegir){
+// Campo de texto que busca en una tabla mientras se escribe.
+function crearBuscador(inputId, { tabla, columnas, nada, detalle, clase = 'sug' }, alElegir){
   const input = $(inputId), sug = $(inputId + '-sug');
   let actuales = [], turno = 0, espera;
 
@@ -510,15 +564,15 @@ function crearBuscadorPT(inputId, alElegir){
     const texto = input.value.trim();
     const n = ++turno;
     if (!texto) { cerrar(); return; }
-    const { data, error } = await buscarEn('productos_terminados', texto, LIMITE_SUG, 'codigo, descripcion');
+    const { data, error } = await buscarEn(tabla, texto, LIMITE_SUG, columnas);
     if (n !== turno) return;            // llegó una respuesta vieja
     sug.hidden = false;
     if (error) { actuales = []; sug.innerHTML = `<p class="comp-vacia">${esc(error.message)}</p>`; return; }
     actuales = data.slice(0, LIMITE_SUG);
     sug.innerHTML = actuales.length === 0
-      ? '<p class="comp-vacia">Ningún producto terminado coincide.</p>'
-      : actuales.map((t, i) => `<button type="button" class="sug" data-i="${i}">
-          ${esc(t.codigo)}<small>${esc(t.descripcion ?? '')}</small></button>`).join('') +
+      ? `<p class="comp-vacia">${nada}</p>`
+      : actuales.map((t, i) => `<button type="button" class="${clase}" data-i="${i}">
+          ${esc(t.codigo)}<small>${esc(detalle(t))}</small></button>`).join('') +
         (data.length > LIMITE_SUG ? '<p class="ayuda">Hay más: seguí escribiendo para afinar.</p>' : '');
   }
   function cerrar(){ turno++; actuales = []; sug.hidden = true; sug.innerHTML = ''; }
@@ -539,6 +593,31 @@ function crearBuscadorPT(inputId, alElegir){
   });
   return { cerrar };
 }
+const crearBuscadorPT = (inputId, alElegir) => crearBuscador(inputId, {
+  tabla: 'productos_terminados', columnas: 'codigo, descripcion',
+  nada: 'Ningún producto terminado coincide.', detalle: t => t.descripcion ?? '',
+}, alElegir);
+
+// ---------- Movimiento: producto ----------
+// Busca en la vista stock, que es lo que ya lee la planta.
+let prodMov = null;
+function mostrarElegido(f){
+  prodMov = f;
+  $('m-prod').value = `${f.codigo} — ${f.descripcion ?? ''}`;
+  $('m-elegido').hidden = false;
+  $('m-elegido').innerHTML =
+    `Stock actual: <strong>${esc(f.stock)}</strong> · Posición: <strong>${esc(f.posicion ?? '—')}</strong>`;
+}
+const buscadorMov = crearBuscador('m-prod', {
+  tabla: 'stock', columnas: 'codigo, descripcion, stock, posicion', clase: 'sug grande',
+  nada: 'Ningún producto coincide.',
+  detalle: f => `${f.descripcion ?? ''} · stock ${f.stock} · ${f.posicion ?? 'sin posición'}`,
+}, mostrarElegido);
+// Si se vuelve a escribir, el elegido deja de valer.
+$('m-prod').addEventListener('input', () => {
+  prodMov = null;
+  $('m-elegido').hidden = true;
+});
 
 // ---------- composición (mismo componente en alta y edición) ----------
 function crearComposicion(prefijo){
@@ -902,7 +981,11 @@ function mostrarLogin(){
   permitidas = [];
   filas = [];
   $('lista').innerHTML = '';
-  $('m-prod').innerHTML = '';
+  $('m-prod').value = '';
+  prodMov = null;
+  $('m-elegido').hidden = true;
+  buscadorMov.cerrar();
+  stockIncompleto = null;
   enFicha = null;
   $('e-ficha').hidden = true;
   $('e-resultados').hidden = false;
