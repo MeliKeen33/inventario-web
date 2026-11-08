@@ -1,5 +1,6 @@
 -- ============================================================
---  Alta, edición y baja de productos en una sola operación.
+--  Alta, edición y baja de productos en una sola operación,
+--  y código de producto inmutable.
 --  Pegar entero en el SQL Editor de Supabase. Se puede volver a
 --  correr: reemplaza las funciones si ya existen.
 --
@@ -26,6 +27,29 @@ language sql immutable
 as $$
   select p_tipo = 'SE' or (p_tipo = 'COR' and p_codigo ~ '^F[0-9]');
 $$;
+
+
+-- ---------- CÓDIGO INMUTABLE ----------
+-- El código se elige en el alta y después no cambia nunca. Lo
+-- garantiza la base, no la pantalla: bloquea cualquier UPDATE que
+-- intente cambiarlo, venga de donde venga.
+create or replace function codigo_inmutable()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.codigo is distinct from old.codigo then
+    raise exception 'El código de un producto no se puede cambiar (% → %)', old.codigo, new.codigo
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists codigo_inmutable on productos;
+create trigger codigo_inmutable
+  before update of codigo on productos
+  for each row execute function codigo_inmutable();
 
 
 -- ---------- ALTA ----------

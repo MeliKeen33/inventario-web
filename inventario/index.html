@@ -98,7 +98,8 @@
   .opciones small{color:var(--gris);font-size:.75rem;margin-left:auto;text-align:right}
   .check{display:flex;align-items:center;gap:.5rem;color:var(--tinta);font-size:.9rem;margin:.9rem 0 0;cursor:pointer}
   .check input{width:auto;margin:0}
-  .req{color:var(--alarma)}
+  .req{color:var(--alarma);font-weight:600}
+  .nota-req{color:var(--gris);font-size:.75rem;margin:.6rem 0 0}
   .separador{border:0;border-top:1px solid var(--linea);margin:1.5rem 0 .5rem}
   .comp-agregar{display:flex;gap:.4rem}
   .comp-agregar input{flex:1}
@@ -132,13 +133,14 @@
   <!-- ====== LOGIN ====== -->
   <section id="p-login" hidden>
     <form id="l-form">
-      <label for="l-mail">Mail</label>
+      <label for="l-mail">Mail <span class="req" aria-hidden="true">*</span></label>
       <input id="l-mail" type="email" autocomplete="username" required>
 
-      <label for="l-clave">Contraseña</label>
+      <label for="l-clave">Contraseña <span class="req" aria-hidden="true">*</span></label>
       <input id="l-clave" type="password" autocomplete="current-password" required>
 
       <button class="enviar" id="l-entrar" type="submit">Entrar</button>
+      <p class="nota-req"><span class="req">*</span> Campo obligatorio</p>
     </form>
     <div id="l-aviso"></div>
   </section>
@@ -170,30 +172,31 @@
 
   <!-- ====== MOVIMIENTO ====== -->
   <section id="p-mov" hidden>
-    <label for="m-prod">Producto</label>
+    <label for="m-prod">Producto <span class="req" aria-hidden="true">*</span></label>
     <select id="m-prod"></select>
 
-    <label for="m-fecha">Fecha del movimiento</label>
+    <label for="m-fecha">Fecha del movimiento <span class="req" aria-hidden="true">*</span></label>
     <input id="m-fecha" type="date">
 
-    <label for="m-motivo">Motivo</label>
+    <label for="m-motivo">Motivo <span class="req" aria-hidden="true">*</span></label>
     <select id="m-motivo"><option value="">Cargando…</option></select>
     <p id="m-sentido" class="sentido"></p>
 
-    <label for="m-cant">Cantidad</label>
+    <label for="m-cant">Cantidad <span class="req" aria-hidden="true">*</span></label>
     <input id="m-cant" type="number" inputmode="numeric" min="1" step="1" placeholder="Ej.: 50">
 
     <label for="m-nota">Nota (opcional)</label>
     <input id="m-nota" autocomplete="off">
 
     <button class="enviar" id="m-guardar">Registrar movimiento</button>
+    <p class="nota-req"><span class="req">*</span> Campo obligatorio</p>
     <div id="m-aviso"></div>
   </section>
 
   <!-- ====== PRODUCTO NUEVO (admin) ====== -->
   <section id="p-prod" hidden>
     <fieldset>
-      <legend>¿Qué estás dando de alta?</legend>
+      <legend>¿Qué estás dando de alta? <span class="req" aria-hidden="true">*</span></legend>
       <div class="opciones" id="n-opciones">
         <label><input type="radio" name="n-opcion" value="geometrico"> Corte geométrico <small>COR · código a mano</small></label>
         <label><input type="radio" name="n-opcion" value="figura"> Figura <small>COR · código generado</small></label>
@@ -209,7 +212,7 @@
       <!-- Generador: solo Figura y Semielaborado -->
       <div id="n-gen" hidden>
         <div id="n-pref-caja" hidden>
-          <label for="n-pref">Pieza</label>
+          <label for="n-pref">Pieza <span class="req" aria-hidden="true">*</span></label>
           <select id="n-pref">
             <option value="CUE">CUE — cuerpo</option>
             <option value="DES">DES — desarrollo</option>
@@ -220,7 +223,7 @@
           </select>
         </div>
 
-        <label for="n-pt">Producto terminado <span class="req">*</span></label>
+        <label for="n-pt">Producto terminado <span class="req" aria-hidden="true">*</span></label>
         <input id="n-pt" list="dl-pt" autocomplete="off" placeholder="Código del producto terminado">
 
         <label class="check" id="n-otra-caja" hidden>
@@ -228,15 +231,15 @@
         </label>
       </div>
 
-      <label for="n-codigo">Código <span class="req">*</span></label>
+      <label for="n-codigo">Código <span class="req" aria-hidden="true">*</span></label>
       <input id="n-codigo" autocomplete="off">
       <p class="ayuda" id="n-cod-ayuda"></p>
       <div id="n-cod-error"></div>
 
-      <label for="n-desc">Descripción <span class="req">*</span></label>
+      <label for="n-desc">Descripción <span class="req" aria-hidden="true">*</span></label>
       <input id="n-desc" autocomplete="off">
 
-      <label for="n-origen">Origen <span class="req">*</span></label>
+      <label for="n-origen">Origen <span class="req" aria-hidden="true">*</span></label>
       <select id="n-origen">
         <option value="">Elegí el origen…</option>
         <option value="fabricado">Fabricado</option>
@@ -262,7 +265,7 @@
       <input id="n-stock" type="number" inputmode="numeric" min="0" step="1" placeholder="0">
       <p class="ayuda">Si es mayor que cero se registra un movimiento STOCK_INICIAL con fecha de hoy.</p>
 
-      <label for="n-comp-pt">Productos terminados asociados <span class="req" id="n-comp-req" hidden>*</span></label>
+      <label for="n-comp-pt">Productos terminados asociados <span class="req" aria-hidden="true" id="n-comp-req" hidden>*</span></label>
       <div class="comp-agregar">
         <input id="n-comp-pt" list="dl-pt" autocomplete="off" placeholder="Código del producto terminado">
         <button type="button" class="boton2" id="n-comp-add">Agregar</button>
@@ -270,6 +273,7 @@
       <div id="n-comp-lista"></div>
 
       <button class="enviar" id="n-guardar">Dar de alta</button>
+      <p class="nota-req"><span class="req">*</span> Campo obligatorio</p>
       <div id="n-aviso"></div>
     </div>
   </section>
@@ -282,11 +286,12 @@
     <div id="e-ficha" hidden>
       <p class="ficha-cod" id="e-codigo"></p>
       <p class="ficha-tipo" id="e-tipo"></p>
+      <p class="ayuda">El código no se puede cambiar.</p>
 
-      <label for="e-desc">Descripción <span class="req">*</span></label>
+      <label for="e-desc">Descripción <span class="req" aria-hidden="true">*</span></label>
       <input id="e-desc" autocomplete="off">
 
-      <label for="e-origen">Origen <span class="req">*</span></label>
+      <label for="e-origen">Origen <span class="req" aria-hidden="true">*</span></label>
       <select id="e-origen">
         <option value="fabricado">Fabricado</option>
         <option value="comprado">Comprado</option>
@@ -309,7 +314,7 @@
 
       <label class="check"><input type="checkbox" id="e-activo"> Activo</label>
 
-      <label for="e-comp-pt">Productos terminados asociados <span class="req" id="e-comp-req" hidden>*</span></label>
+      <label for="e-comp-pt">Productos terminados asociados <span class="req" aria-hidden="true" id="e-comp-req" hidden>*</span></label>
       <div class="comp-agregar">
         <input id="e-comp-pt" list="dl-pt" autocomplete="off" placeholder="Código del producto terminado">
         <button type="button" class="boton2" id="e-comp-add">Agregar</button>
@@ -317,6 +322,7 @@
       <div id="e-comp-lista"></div>
 
       <button class="enviar" id="e-guardar">Guardar cambios</button>
+      <p class="nota-req"><span class="req">*</span> Campo obligatorio</p>
       <div class="acciones">
         <button type="button" class="boton2" id="e-volver">Volver a buscar</button>
         <button type="button" class="boton2 peligro" id="e-eliminar">Eliminar producto</button>
@@ -588,10 +594,11 @@ $('n-opciones').onchange = () => {
   $('n-etapa-caja').hidden = c.tipo !== 'SE';
   $('n-comp-req').hidden = !c.genera;
   $('n-codigo').placeholder = c.genera ? 'Se arma al elegir el producto terminado' : (c.ejemplo ?? '');
-  $('n-cod-ayuda').textContent = c.genera
-    ? (opcion() === 'figura' ? 'F + código del producto terminado, sin guión. Podés editarlo.'
-                             : 'Pieza + guión + código del producto terminado. Podés editarlo.')
-    : '';
+  $('n-cod-ayuda').textContent = (c.genera
+    ? (opcion() === 'figura' ? 'F + código del producto terminado, sin guión. '
+                             : 'Pieza + guión + código del producto terminado. ') +
+      'Podés corregirlo antes de dar de alta.'
+    : '') + ' Una vez creado, el código no se puede cambiar.';
   $('n-aviso').innerHTML = '';
   condicionalesAlta();
 };
