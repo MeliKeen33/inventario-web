@@ -77,6 +77,15 @@
   .sentido.entra{color:var(--accion)}
   .sentido.sale{color:var(--alarma)}
   .ayuda{color:var(--gris);font-size:.75rem;margin:.3rem 0 0}
+  .sesion{display:flex;align-items:center;gap:.75rem;margin:0 0 1.25rem;
+    padding:.6rem .75rem;background:var(--campo);border:1px solid var(--linea);border-radius:3px}
+  .sesion .quien{flex:1;min-width:0;font-size:.9rem}
+  .sesion .quien strong{font-weight:600}
+  .sesion .rol{color:var(--gris);font-size:.8rem}
+  .salir{padding:.55rem .8rem;border:1px solid var(--linea);background:var(--papel);
+    color:var(--tinta);border-radius:3px;font:inherit;font-size:.85rem;cursor:pointer}
+  .salir:focus-visible{outline:2px solid var(--accion);outline-offset:2px}
+  [hidden]{display:none !important}
   .resumen{color:var(--gris);font-size:.85rem;margin:.9rem 0 .2rem}
   .resumen strong{color:var(--tinta);font-weight:600}
 </style>
@@ -87,7 +96,32 @@
   <h1>Inventario D&amp;L</h1>
   <p class="sub">Centro de distribución y logística — Acermel</p>
 
-  <nav>
+  <!-- ====== LOGIN ====== -->
+  <section id="p-login" hidden>
+    <form id="l-form">
+      <label for="l-mail">Mail</label>
+      <input id="l-mail" type="email" autocomplete="username" required>
+
+      <label for="l-clave">Contraseña</label>
+      <input id="l-clave" type="password" autocomplete="current-password" required>
+
+      <button class="enviar" id="l-entrar" type="submit">Entrar</button>
+    </form>
+    <div id="l-aviso"></div>
+  </section>
+
+  <!-- ====== APP (solo con sesión) ====== -->
+  <div id="app" hidden>
+
+  <div class="sesion">
+    <div class="quien">
+      <strong id="s-nombre"></strong>
+      <div class="rol" id="s-rol"></div>
+    </div>
+    <button class="salir" id="s-salir">Cerrar sesión</button>
+  </div>
+
+  <nav id="pestanas">
     <button id="t-stock" aria-selected="true">Stock</button>
     <button id="t-mov"   aria-selected="false">Movimiento</button>
     <button id="t-prod"  aria-selected="false">Producto nuevo</button>
@@ -163,6 +197,8 @@
     <div id="p-aviso"></div>
   </section>
 
+  </div><!-- /app -->
+
 </main>
 
 <script type="module">
@@ -181,15 +217,37 @@ const db = createClient(SUPABASE_URL, SUPABASE_ANON);
 const $ = id => document.getElementById(id);
 let filas = [];
 
-// ---------- pestañas ----------
+// ---------- pestañas según rol ----------
+// Esto solo arma la pantalla: lo que cada rol puede hacer lo bloquea la base con RLS.
 const tabs = [['t-stock','p-stock'],['t-mov','p-mov'],['t-prod','p-prod']];
-tabs.forEach(([bot, pan]) => $(bot).onclick = () => {
+const PERMISOS = {
+  planta:   ['t-stock', 't-mov'],
+  admin:    ['t-stock', 't-mov', 't-prod'],
+  gerencia: ['t-stock'],
+};
+const NOMBRE_ROL = { planta: 'Planta', admin: 'Administración', gerencia: 'Gerencia' };
+let permitidas = [];
+
+function abrir(bot){
+  if (!permitidas.includes(bot)) return;
   tabs.forEach(([b, p]) => {
     $(b).setAttribute('aria-selected', b === bot);
-    $(p).hidden = p !== pan;
+    $(p).hidden = b !== bot;
   });
-  if (pan === 'p-stock') cargarStock();
-});
+  if (bot === 't-stock') cargarStock();
+}
+tabs.forEach(([bot]) => $(bot).onclick = () => abrir(bot));
+
+function armarPantalla(rol){
+  permitidas = PERMISOS[rol] ?? [];
+  tabs.forEach(([b, p]) => {
+    $(b).hidden = !permitidas.includes(b);
+    $(p).hidden = true;
+  });
+  // Con una sola pestaña, la barra no aporta nada.
+  $('pestanas').hidden = permitidas.length < 2;
+  if (permitidas.length) abrir(permitidas[0]);
+}
 
 // ---------- stock ----------
 async function cargarStock(){
@@ -319,8 +377,64 @@ $('p-guardar').onclick = async () => {
   cargarStock();
 };
 
-cargarStock();
-cargarMotivos();
+// ---------- sesión ----------
+function mostrarLogin(){
+  $('app').hidden = true;
+  $('p-login').hidden = false;
+  permitidas = [];
+  filas = [];
+  $('lista').innerHTML = '';
+  $('m-prod').innerHTML = '';
+}
+
+let usuarioActual = null;
+async function entrarCon(user){
+  if (user.id === usuarioActual) return;   // p. ej. refresco de token
+  usuarioActual = user.id;
+
+  const { data: perfil, error } = await db
+    .from('perfiles').select('nombre, rol').eq('id', user.id).maybeSingle();
+
+  $('p-login').hidden = true;
+  $('app').hidden = false;
+  $('s-nombre').textContent = perfil?.nombre || user.email;
+
+  if (error || !perfil || !PERMISOS[perfil.rol]) {
+    $('s-rol').textContent = error
+      ? 'No se pudo leer el perfil: ' + error.message
+      : !perfil ? 'Este usuario no tiene perfil cargado.'
+      : 'Rol desconocido: ' + perfil.rol;
+    armarPantalla(null);
+    return;
+  }
+  $('s-rol').textContent = NOMBRE_ROL[perfil.rol];
+  armarPantalla(perfil.rol);
+  if (permitidas.includes('t-mov')) cargarMotivos();
+}
+
+db.auth.onAuthStateChange((_evento, sesion) => {
+  // Fuera del callback: Supabase recomienda no esperar otras llamadas adentro.
+  setTimeout(() => {
+    if (sesion?.user) entrarCon(sesion.user);
+    else { usuarioActual = null; mostrarLogin(); }
+  }, 0);
+});
+
+$('l-form').onsubmit = async e => {
+  e.preventDefault();
+  const b = $('l-entrar');
+  b.disabled = true;
+  $('l-aviso').innerHTML = '';
+  const { error } = await db.auth.signInWithPassword({
+    email: $('l-mail').value.trim(),
+    password: $('l-clave').value,
+  });
+  b.disabled = false;
+  if (error) { avisar('l-aviso', 'No se pudo entrar:\n' + error.message, false); return; }
+  $('l-clave').value = '';
+};
+
+$('s-salir').onclick = () => db.auth.signOut();
 </script>
 </body>
 </html>
