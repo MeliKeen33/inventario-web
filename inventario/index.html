@@ -621,14 +621,15 @@ $('m-prod').addEventListener('input', () => {
 
 // ---------- composición (mismo componente en alta y edición) ----------
 function crearComposicion(prefijo){
-  let items = [];   // [{producto_terminado, cantidad, descripcion}]
+  // auto: true en la fila que puso el generador de código (solo en el alta).
+  let items = [];   // [{producto_terminado, cantidad, descripcion, auto}]
   const lista = $(prefijo + '-comp-lista');
 
   function pintarComp(){
     lista.innerHTML = items.length === 0
       ? '<p class="comp-vacia">Ninguno asociado.</p>'
       : items.map((it, i) => `<div class="comp-fila">
-            <div class="texto">${esc(it.producto_terminado)}<small>${esc(it.descripcion ?? '')}</small></div>
+            <div class="texto">${esc(it.producto_terminado)}<small>${esc(it.descripcion ?? '')}${it.auto ? ' · el del código' : ''}</small></div>
             <input type="number" inputmode="numeric" min="1" step="1" value="${it.cantidad}"
                    data-i="${i}" aria-label="Cantidad de ${esc(it.producto_terminado)}">
             <button type="button" class="boton2" data-quitar="${i}">Quitar</button>
@@ -654,10 +655,22 @@ function crearComposicion(prefijo){
     $(prefijo + '-comp-pt').value = '';
   });
 
+  // El producto terminado del generador: reemplaza a la fila que había puesto
+  // el generador antes, en el mismo lugar, sin tocar las agregadas a mano.
+  function ponerDelGenerador(t){
+    const i = items.findIndex(it => it.auto);
+    if (i >= 0 && items[i].producto_terminado === t.codigo) return;      // mismo de antes
+    const nueva = { producto_terminado: t.codigo, cantidad: 1, descripcion: t.descripcion, auto: true };
+    const yaAMano = items.some(it => it.producto_terminado === t.codigo);
+    if (i >= 0 && yaAMano) items.splice(i, 1);    // ya estaba a mano: queda esa, se va la vieja
+    else if (i >= 0)       items[i] = nueva;
+    else if (!yaAMano)     items.push(nueva);
+    pintarComp();
+  }
+
   return {
     agregar,
-    quitar: codigo => { items = items.filter(it => it.producto_terminado !== codigo); pintarComp(); },
-    tiene:  codigo => items.some(it => it.producto_terminado === codigo),
+    ponerDelGenerador,
     poner:  nuevos => {
       items = nuevos.map(it => ({ producto_terminado: it.producto_terminado, cantidad: it.cantidad, descripcion: it.descripcion }));
       buscador.cerrar();
@@ -725,18 +738,14 @@ function condicionalesAlta(){
 // El producto terminado del generador entra solo a la composición.
 let ptGenerador = null;   // {codigo, descripcion}
 const buscadorGenerador = crearBuscadorPT('n-pt', t => {
-  if (ptGenerador && ptGenerador.codigo !== t.codigo) compNueva.quitar(ptGenerador.codigo);
   ptGenerador = t;
   $('n-pt').value = `${t.codigo} — ${t.descripcion ?? ''}`;
-  compNueva.agregar(t);
+  compNueva.ponerDelGenerador(t);
   generarCodigo();
 });
-// Si se vuelve a escribir, el elegido deja de valer.
-$('n-pt').addEventListener('input', () => {
-  if (!ptGenerador) return;
-  compNueva.quitar(ptGenerador.codigo);
-  ptGenerador = null;
-});
+// Si se vuelve a escribir, el elegido deja de valer hasta que se elija otro.
+// La lista no se toca: se actualiza recién al elegir.
+$('n-pt').addEventListener('input', () => { ptGenerador = null; });
 
 async function generarCodigo(){
   const pt = ptGenerador;
