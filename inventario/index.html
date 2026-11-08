@@ -101,8 +101,14 @@
   .req{color:var(--alarma);font-weight:600}
   .nota-req{color:var(--gris);font-size:.75rem;margin:.6rem 0 0}
   .separador{border:0;border-top:1px solid var(--linea);margin:1.5rem 0 .5rem}
-  .comp-agregar{display:flex;gap:.4rem}
-  .comp-agregar input{flex:1}
+  .sugerencias{border:1px solid var(--linea);border-top:0;background:var(--campo);
+    max-height:18rem;overflow:auto;border-radius:0 0 3px 3px}
+  .sug{display:block;width:100%;text-align:left;padding:.65rem .75rem;border:0;
+    border-bottom:1px solid var(--linea);background:none;font:inherit;font-size:.9rem;color:var(--tinta);cursor:pointer}
+  .sug:last-child{border-bottom:0}
+  .sug:hover,.sug:focus-visible{background:var(--papel);outline:none}
+  .sug small{display:block;color:var(--gris);font-size:.75rem}
+  .sugerencias .ayuda,.sugerencias .comp-vacia{padding:.5rem .75rem;margin:0}
   .boton2{padding:.6rem .9rem;border:1px solid var(--linea);background:var(--campo);color:var(--tinta);
     border-radius:3px;font:inherit;font-size:.9rem;cursor:pointer;white-space:nowrap}
   .boton2:focus-visible{outline:2px solid var(--accion);outline-offset:2px}
@@ -224,7 +230,8 @@
         </div>
 
         <label for="n-pt">Producto terminado <span class="req" aria-hidden="true">*</span></label>
-        <input id="n-pt" list="dl-pt" autocomplete="off" placeholder="Código del producto terminado">
+        <input id="n-pt" autocomplete="off" placeholder="Buscá por código o descripción">
+        <div class="sugerencias" id="n-pt-sug" hidden></div>
 
         <label class="check" id="n-otra-caja" hidden>
           <input type="checkbox" id="n-otra"> Es otra figura del mismo producto terminado
@@ -266,10 +273,8 @@
       <p class="ayuda">Si es mayor que cero se registra un movimiento STOCK_INICIAL con fecha de hoy.</p>
 
       <label for="n-comp-pt">Productos terminados asociados <span class="req" aria-hidden="true" id="n-comp-req" hidden>*</span></label>
-      <div class="comp-agregar">
-        <input id="n-comp-pt" list="dl-pt" autocomplete="off" placeholder="Código del producto terminado">
-        <button type="button" class="boton2" id="n-comp-add">Agregar</button>
-      </div>
+      <input id="n-comp-pt" autocomplete="off" placeholder="Buscá por código o descripción para agregar">
+      <div class="sugerencias" id="n-comp-pt-sug" hidden></div>
       <div id="n-comp-lista"></div>
 
       <button class="enviar" id="n-guardar">Dar de alta</button>
@@ -315,10 +320,8 @@
       <label class="check"><input type="checkbox" id="e-activo"> Activo</label>
 
       <label for="e-comp-pt">Productos terminados asociados <span class="req" aria-hidden="true" id="e-comp-req" hidden>*</span></label>
-      <div class="comp-agregar">
-        <input id="e-comp-pt" list="dl-pt" autocomplete="off" placeholder="Código del producto terminado">
-        <button type="button" class="boton2" id="e-comp-add">Agregar</button>
-      </div>
+      <input id="e-comp-pt" autocomplete="off" placeholder="Buscá por código o descripción para agregar">
+      <div class="sugerencias" id="e-comp-pt-sug" hidden></div>
       <div id="e-comp-lista"></div>
 
       <button class="enviar" id="e-guardar">Guardar cambios</button>
@@ -330,8 +333,6 @@
       <div id="e-aviso"></div>
     </div>
   </section>
-
-  <datalist id="dl-pt"></datalist>
 
   </div><!-- /app -->
 
@@ -371,8 +372,7 @@ function abrir(bot){
     $(p).hidden = b !== bot;
   });
   if (bot === 't-stock') cargarStock();
-  if (bot === 't-prod' || bot === 't-edit') cargarTerminados();
-  if (bot === 't-edit') cargarProductos();
+  if (bot === 't-edit' && !enFicha) buscarProductos();
 }
 tabs.forEach(([bot]) => $(bot).onclick = () => abrir(bot));
 
@@ -489,34 +489,71 @@ const tieneX = codigo => codigo.toUpperCase().includes('X');
 const leerFamilia = id => [...new Set($(id).value.toUpperCase().split(/[\s,;]+/).filter(Boolean))];
 const ORIGENES = ['fabricado', 'comprado', 'importado'];
 
-// Productos terminados: alimentan el generador y la composición.
-let terminados = [];
-async function cargarTerminados(){
-  const { data, error } = await db.from('productos_terminados').select('*').order('codigo');
-  if (error) { avisar('n-aviso', 'No se pudieron leer los productos terminados:\n' + error.message, false); return; }
-  terminados = data;
-  $('dl-pt').innerHTML = data
-    .map(t => `<option value="${esc(t.codigo)}">${esc(t.descripcion ?? '')}</option>`).join('');
+// ---------- búsqueda en la base ----------
+// La búsqueda se hace en Postgres, no trayendo la tabla entera: hay cientos
+// de filas y Supabase corta cada consulta en 1000.
+const LIMITE_SUG = 15;
+function buscarEn(tabla, texto, limite, columnas = '*'){
+  // Sacamos los caracteres que tienen significado en el filtro de PostgREST.
+  const t = texto.replace(/[,()"*%\\]/g, ' ').trim();
+  return db.from(tabla).select(columnas)
+    .or(`codigo.ilike.*${t}*,descripcion.ilike.*${t}*`)
+    .order('codigo').limit(limite + 1);   // +1 para saber si hay más
 }
-const buscarPT = codigo => terminados.find(t => t.codigo === codigo.trim());
+
+// Campo de texto que busca productos terminados mientras se escribe.
+function crearBuscadorPT(inputId, alElegir){
+  const input = $(inputId), sug = $(inputId + '-sug');
+  let actuales = [], turno = 0, espera;
+
+  async function buscar(){
+    const texto = input.value.trim();
+    const n = ++turno;
+    if (!texto) { cerrar(); return; }
+    const { data, error } = await buscarEn('productos_terminados', texto, LIMITE_SUG, 'codigo, descripcion');
+    if (n !== turno) return;            // llegó una respuesta vieja
+    sug.hidden = false;
+    if (error) { actuales = []; sug.innerHTML = `<p class="comp-vacia">${esc(error.message)}</p>`; return; }
+    actuales = data.slice(0, LIMITE_SUG);
+    sug.innerHTML = actuales.length === 0
+      ? '<p class="comp-vacia">Ningún producto terminado coincide.</p>'
+      : actuales.map((t, i) => `<button type="button" class="sug" data-i="${i}">
+          ${esc(t.codigo)}<small>${esc(t.descripcion ?? '')}</small></button>`).join('') +
+        (data.length > LIMITE_SUG ? '<p class="ayuda">Hay más: seguí escribiendo para afinar.</p>' : '');
+  }
+  function cerrar(){ turno++; actuales = []; sug.hidden = true; sug.innerHTML = ''; }
+  function elegir(t){ cerrar(); alElegir(t); }
+
+  input.addEventListener('input', () => { clearTimeout(espera); espera = setTimeout(buscar, 250); });
+  sug.addEventListener('click', e => {
+    const b = e.target.closest('[data-i]');
+    if (b) elegir(actuales[b.dataset.i]);
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') cerrar();
+    if (e.key !== 'Enter' || sug.hidden) return;
+    // Enter elige solo si no hay duda: código exacto o un único resultado.
+    const exacto = actuales.find(t => t.codigo.toLowerCase() === input.value.trim().toLowerCase());
+    const unico = actuales.length === 1 ? actuales[0] : null;
+    if (exacto || unico) { e.preventDefault(); elegir(exacto || unico); }
+  });
+  return { cerrar };
+}
 
 // ---------- composición (mismo componente en alta y edición) ----------
 function crearComposicion(prefijo){
-  let items = [];   // [{producto_terminado, cantidad}]
+  let items = [];   // [{producto_terminado, cantidad, descripcion}]
   const lista = $(prefijo + '-comp-lista');
 
   function pintarComp(){
     lista.innerHTML = items.length === 0
       ? '<p class="comp-vacia">Ninguno asociado.</p>'
-      : items.map((it, i) => {
-          const pt = buscarPT(it.producto_terminado);
-          return `<div class="comp-fila">
-            <div class="texto">${esc(it.producto_terminado)}<small>${esc(pt?.descripcion ?? '')}</small></div>
+      : items.map((it, i) => `<div class="comp-fila">
+            <div class="texto">${esc(it.producto_terminado)}<small>${esc(it.descripcion ?? '')}</small></div>
             <input type="number" inputmode="numeric" min="1" step="1" value="${it.cantidad}"
                    data-i="${i}" aria-label="Cantidad de ${esc(it.producto_terminado)}">
             <button type="button" class="boton2" data-quitar="${i}">Quitar</button>
-          </div>`;
-        }).join('');
+          </div>`).join('');
   }
   lista.addEventListener('input', e => {
     const i = e.target.dataset.i;
@@ -527,29 +564,27 @@ function crearComposicion(prefijo){
     if (i !== undefined) { items.splice(Number(i), 1); pintarComp(); }
   });
 
-  function agregar(codigo){
-    codigo = codigo.trim();
-    if (!buscarPT(codigo)) return false;
-    if (!items.some(it => it.producto_terminado === codigo)) items.push({ producto_terminado: codigo, cantidad: 1 });
+  // t: fila de productos_terminados {codigo, descripcion}
+  function agregar(t){
+    if (!items.some(it => it.producto_terminado === t.codigo))
+      items.push({ producto_terminado: t.codigo, cantidad: 1, descripcion: t.descripcion });
     pintarComp();
-    return true;
   }
-  $(prefijo + '-comp-add').onclick = () => {
-    const campo = $(prefijo + '-comp-pt');
-    if (!campo.value.trim()) return;
-    if (agregar(campo.value)) campo.value = '';
-    else avisar(prefijo + '-aviso', `"${campo.value}" no está en la lista de productos terminados.`, false);
-  };
+  const buscador = crearBuscadorPT(prefijo + '-comp-pt', t => {
+    agregar(t);
+    $(prefijo + '-comp-pt').value = '';
+  });
 
   return {
     agregar,
     quitar: codigo => { items = items.filter(it => it.producto_terminado !== codigo); pintarComp(); },
     tiene:  codigo => items.some(it => it.producto_terminado === codigo),
     poner:  nuevos => {
-      items = nuevos.map(it => ({ producto_terminado: it.producto_terminado, cantidad: it.cantidad }));
+      items = nuevos.map(it => ({ producto_terminado: it.producto_terminado, cantidad: it.cantidad, descripcion: it.descripcion }));
+      buscador.cerrar();
       pintarComp();
     },
-    leer:   () => items.map(it => ({ ...it })),
+    leer:   () => items.map(it => ({ producto_terminado: it.producto_terminado, cantidad: it.cantidad })),
     // Cortesía: la base vuelve a validar.
     error:  obligatorio => {
       if (obligatorio && items.length === 0) return 'Asociá al menos un producto terminado.';
@@ -581,6 +616,7 @@ function limpiarAlta(){
   $('n-otra').checked = false;
   $('n-cod-error').innerHTML = '';
   ptGenerador = null;
+  buscadorGenerador.cerrar();
   compNueva.poner([]);
 }
 
@@ -608,14 +644,24 @@ function condicionalesAlta(){
 }
 
 // El producto terminado del generador entra solo a la composición.
-let ptGenerador = null;
-async function generarCodigo(){
-  const pt = buscarPT($('n-pt').value);
-  if (ptGenerador && ptGenerador !== pt?.codigo) compNueva.quitar(ptGenerador);
-  ptGenerador = pt?.codigo ?? null;
-  if (!pt) return;
-  if (!compNueva.tiene(pt.codigo)) compNueva.agregar(pt.codigo);
+let ptGenerador = null;   // {codigo, descripcion}
+const buscadorGenerador = crearBuscadorPT('n-pt', t => {
+  if (ptGenerador && ptGenerador.codigo !== t.codigo) compNueva.quitar(ptGenerador.codigo);
+  ptGenerador = t;
+  $('n-pt').value = `${t.codigo} — ${t.descripcion ?? ''}`;
+  compNueva.agregar(t);
+  generarCodigo();
+});
+// Si se vuelve a escribir, el elegido deja de valer.
+$('n-pt').addEventListener('input', () => {
+  if (!ptGenerador) return;
+  compNueva.quitar(ptGenerador.codigo);
+  ptGenerador = null;
+});
 
+async function generarCodigo(){
+  const pt = ptGenerador;
+  if (!pt) return;
   const base = pt.codigo.replaceAll('-', '');
   let codigo;
   if (opcion() === 'se') {
@@ -642,7 +688,6 @@ async function siguienteCorrelativo(base){
   return `F${base}${String(siguiente).padStart(2, '0')}`;
 }
 
-$('n-pt').oninput   = generarCodigo;
 $('n-pref').onchange = generarCodigo;
 $('n-otra').onchange = generarCodigo;
 
@@ -680,7 +725,8 @@ $('n-guardar').onclick = async () => {
   const stock = stockTxt === '' ? 0 : Number(stockTxt);
 
   const falta =
-      !codigo                           ? 'Falta el código.'
+      c.genera && !ptGenerador          ? 'Elegí el producto terminado de la lista.'
+    : !codigo                         ? 'Falta el código.'
     : !$('n-desc').value.trim()         ? 'Falta la descripción.'
     : !ORIGENES.includes($('n-origen').value) ? 'Elegí el origen.'
     : !Number.isInteger(stock) || stock < 0   ? 'El stock inicial tiene que ser un entero, cero o mayor.'
@@ -717,41 +763,50 @@ $('n-guardar').onclick = async () => {
 };
 
 // ---------- EDITAR PRODUCTO ----------
-let productos = [];
 let enFicha = null;   // producto abierto
+let turnoEdit = 0, esperaEdit;
 
-async function cargarProductos(){
-  const { data, error } = await db.from('productos').select('*').order('codigo');
+async function buscarProductos(){
+  const texto = $('e-buscar').value.trim();
+  const n = ++turnoEdit;
+  if (!texto) { $('e-resultados').innerHTML = '<p class="vacio">Escribí un código o una descripción.</p>'; return; }
+  const { data, error } = await buscarEn('productos', texto, 30, 'codigo, descripcion, tipo, activo');
+  if (n !== turnoEdit) return;
   if (error) { $('e-resultados').innerHTML = `<p class="vacio">${esc(error.message)}</p>`; return; }
-  productos = data;
-  if (!enFicha) pintarResultados();
-}
-
-function pintarResultados(){
-  const q = $('e-buscar').value.trim().toLowerCase();
-  if (!q) { $('e-resultados').innerHTML = '<p class="vacio">Escribí un código o una descripción.</p>'; return; }
-  const ver = productos.filter(f => (f.codigo + ' ' + f.descripcion).toLowerCase().includes(q));
-  $('e-resultados').innerHTML = ver.length === 0
+  $('e-resultados').innerHTML = data.length === 0
     ? '<p class="vacio">Sin resultados.</p>'
-    : ver.slice(0, 30).map(f => `
+    : data.slice(0, 30).map(f => `
         <button type="button" class="resultado" data-codigo="${esc(f.codigo)}">
           <strong>${esc(f.codigo)}</strong>${f.activo === false ? '<span class="etiqueta">inactivo</span>' : ''}
           <small>${esc(f.descripcion)} · ${esc(f.tipo)}</small>
         </button>`).join('') +
-      (ver.length > 30 ? `<p class="ayuda">Y ${ver.length - 30} más: afiná la búsqueda.</p>` : '');
+      (data.length > 30 ? '<p class="ayuda">Hay más: seguí escribiendo para afinar.</p>' : '');
 }
-$('e-buscar').oninput = () => { cerrarFicha(); pintarResultados(); };
+$('e-buscar').oninput = () => {
+  cerrarFicha();
+  clearTimeout(esperaEdit);
+  esperaEdit = setTimeout(buscarProductos, 250);
+};
 $('e-resultados').onclick = e => {
   const boton = e.target.closest('[data-codigo]');
   if (boton) abrirFicha(boton.dataset.codigo);
 };
 
+const leerProducto = codigo => db.from('productos').select('*').eq('codigo', codigo).maybeSingle();
+
 async function abrirFicha(codigo){
-  const f = productos.find(x => x.codigo === codigo);
-  if (!f) return;
-  const { data: comp, error } = await db.from('composicion')
+  const { data: f, error: e1 } = await leerProducto(codigo);
+  const { data: comp, error: e2 } = await db.from('composicion')
     .select('producto_terminado, cantidad').eq('producto', codigo);
-  if (error) { avisar('e-aviso', 'No se pudo leer la composición:\n' + error.message, false); return; }
+  const error = e1 || e2;
+  if (error || !f) { avisar('e-aviso', 'No se pudo abrir el producto' + (error ? ':\n' + error.message : '.'), false); return; }
+
+  // Descripciones de los productos terminados asociados.
+  if (comp.length) {
+    const { data: pts } = await db.from('productos_terminados')
+      .select('codigo, descripcion').in('codigo', comp.map(c => c.producto_terminado));
+    comp.forEach(c => c.descripcion = pts?.find(t => t.codigo === c.producto_terminado)?.descripcion);
+  }
 
   enFicha = f;
   $('e-resultados').hidden = true;
@@ -778,7 +833,7 @@ function cerrarFicha(){
   $('e-ficha').hidden = true;
   $('e-resultados').hidden = false;
 }
-$('e-volver').onclick = () => { cerrarFicha(); pintarResultados(); $('e-buscar').focus(); };
+$('e-volver').onclick = () => { cerrarFicha(); buscarProductos(); $('e-buscar').focus(); };
 
 $('e-guardar').onclick = async () => {
   const f = enFicha;
@@ -806,8 +861,7 @@ $('e-guardar').onclick = async () => {
 
   if (error) { avisar('e-aviso', 'La base lo rechazó:\n' + error.message, false); return; }
   avisar('e-aviso', 'Cambios guardados.', true);
-  await cargarProductos();
-  enFicha = productos.find(x => x.codigo === f.codigo) ?? f;
+  enFicha = (await leerProducto(f.codigo)).data ?? f;
 };
 
 $('e-eliminar').onclick = async () => {
@@ -824,8 +878,7 @@ $('e-eliminar').onclick = async () => {
   if (error) { avisar('e-aviso', 'La base lo rechazó:\n' + error.message, false); return; }
 
   cerrarFicha();
-  await cargarProductos();
-  pintarResultados();
+  await buscarProductos();
   $('e-resultados').insertAdjacentHTML('afterbegin', `<div class="aviso ok">Producto ${esc(f.codigo)} eliminado.</div>`);
 };
 
@@ -839,8 +892,7 @@ async function desactivar(){
   }
   $('e-activo').checked = false;
   avisar('e-aviso', `Producto ${f.codigo} desactivado. Sigue en el catálogo, con sus movimientos.`, true);
-  await cargarProductos();
-  enFicha = productos.find(x => x.codigo === f.codigo) ?? f;
+  enFicha = (await leerProducto(f.codigo)).data ?? f;
 }
 
 // ---------- sesión ----------
@@ -851,8 +903,7 @@ function mostrarLogin(){
   filas = [];
   $('lista').innerHTML = '';
   $('m-prod').innerHTML = '';
-  productos = []; terminados = []; enFicha = null;
-  $('dl-pt').innerHTML = '';
+  enFicha = null;
   $('e-ficha').hidden = true;
   $('e-resultados').hidden = false;
   $('e-resultados').innerHTML = '';
