@@ -77,6 +77,8 @@
   .sentido.entra{color:var(--accion)}
   .sentido.sale{color:var(--alarma)}
   .ayuda{color:var(--gris);font-size:.75rem;margin:.3rem 0 0}
+  .titulo-bloque{font-size:.8rem;color:var(--gris);margin:1rem 0 .3rem}
+  .sub-etiqueta{margin-top:.6rem}
   .sesion{display:flex;align-items:center;gap:.75rem;margin:0 0 1.25rem;
     padding:.6rem .75rem;background:var(--campo);border:1px solid var(--linea);border-radius:3px}
   .sesion .quien{flex:1;min-width:0;font-size:.9rem}
@@ -280,10 +282,14 @@
       <input id="n-stock" type="number" inputmode="numeric" min="0" step="1" placeholder="0">
       <p class="ayuda">Si es mayor que cero se registra un movimiento STOCK_INICIAL con fecha de hoy.</p>
 
-      <label for="n-comp-pt">Productos terminados asociados <span class="req" aria-hidden="true" id="n-comp-req" hidden>*</span></label>
-      <input id="n-comp-pt" autocomplete="off" placeholder="Buscá por código o descripción para agregar">
-      <div class="sugerencias" id="n-comp-pt-sug" hidden></div>
+      <!-- Primero la lista y después el buscador para sumar otros: así no
+           parece un segundo campo que pide de nuevo el producto terminado. -->
+      <p class="titulo-bloque">Productos terminados asociados</p>
+      <p class="ayuda" id="n-comp-ayuda" hidden>El producto terminado que elegiste arriba se agrega solo, con cantidad 1. Acá podés cambiarle la cantidad, quitarlo o sumar otros.</p>
       <div id="n-comp-lista"></div>
+      <label for="n-comp-pt" class="sub-etiqueta" id="n-comp-etiqueta">Agregar producto terminado</label>
+      <input id="n-comp-pt" autocomplete="off" placeholder="Buscá por código o descripción">
+      <div class="sugerencias" id="n-comp-pt-sug" hidden></div>
 
       <button class="enviar" id="n-guardar">Dar de alta</button>
       <p class="nota-req"><span class="req">*</span> Campo obligatorio</p>
@@ -623,11 +629,12 @@ $('m-prod').addEventListener('input', () => {
 function crearComposicion(prefijo){
   // auto: true en la fila que puso el generador de código (solo en el alta).
   let items = [];   // [{producto_terminado, cantidad, descripcion, auto}]
+  let textoVacio = 'Ninguno asociado.';
   const lista = $(prefijo + '-comp-lista');
 
   function pintarComp(){
     lista.innerHTML = items.length === 0
-      ? '<p class="comp-vacia">Ninguno asociado.</p>'
+      ? `<p class="comp-vacia">${textoVacio}</p>`
       : items.map((it, i) => `<div class="comp-fila">
             <div class="texto">${esc(it.producto_terminado)}<small>${esc(it.descripcion ?? '')}${it.auto ? ' · el del código' : ''}</small></div>
             <input type="number" inputmode="numeric" min="1" step="1" value="${it.cantidad}"
@@ -671,6 +678,7 @@ function crearComposicion(prefijo){
   return {
     agregar,
     ponerDelGenerador,
+    vacio:  texto => { textoVacio = texto; pintarComp(); },
     poner:  nuevos => {
       items = nuevos.map(it => ({ producto_terminado: it.producto_terminado, cantidad: it.cantidad, descripcion: it.descripcion }));
       buscador.cerrar();
@@ -720,7 +728,12 @@ $('n-opciones').onchange = () => {
   $('n-pref-caja').hidden = opcion() !== 'se';
   $('n-otra-caja').hidden = opcion() !== 'figura';
   $('n-etapa-caja').hidden = c.tipo !== 'SE';
-  $('n-comp-req').hidden = !c.genera;
+  // Con generador, el producto terminado ya se pide arriba (obligatorio) y
+  // entra solo a la lista: abajo solo se suman otros.
+  $('n-comp-ayuda').hidden = !c.genera;
+  $('n-comp-etiqueta').textContent = c.genera ? 'Agregar otro producto terminado (opcional)'
+                                              : 'Agregar producto terminado (opcional)';
+  compNueva.vacio(c.genera ? 'Todavía ninguno: el que elijas arriba aparece acá.' : 'Ninguno asociado.');
   $('n-codigo').placeholder = c.genera ? 'Se arma al elegir el producto terminado' : (c.ejemplo ?? '');
   $('n-cod-ayuda').textContent = (c.genera
     ? (opcion() === 'figura' ? 'F + código del producto terminado, sin guión. '
