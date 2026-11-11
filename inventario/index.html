@@ -68,6 +68,16 @@
   .fila .cant{font-size:1.5rem;font-weight:600;letter-spacing:-.02em}
   .fila .cant.negativo{color:var(--alarma)}
   .fila .donde{color:var(--gris);font-size:.75rem;min-width:2rem;text-align:right}
+  .fila .tipo{display:inline-block;margin-left:.4rem;padding:0 .3rem;border:1px solid var(--linea);
+    border-radius:2px;color:var(--gris);font-size:.7rem;font-weight:500;vertical-align:1px}
+  /* etapa es texto libre y puede ser largo: corta en varias líneas, nunca ensancha la fila */
+  .fila .etapa{color:var(--gris);font-size:.75rem;margin-top:.15rem;
+    white-space:normal;overflow-wrap:anywhere}
+  .filtros{display:flex;gap:.35rem;margin-top:.5rem}
+  .filtros button{flex:1;padding:.6rem .3rem;border:1px solid var(--linea);background:var(--campo);
+    color:var(--gris);border-radius:3px;font:inherit;font-size:.85rem;cursor:pointer}
+  .filtros button[aria-pressed="true"]{background:var(--tinta);color:var(--papel);border-color:var(--tinta);font-weight:500}
+  .filtros button:focus-visible{outline:2px solid var(--accion);outline-offset:2px}
 
   .aviso{padding:.8rem;border-radius:3px;margin-top:1rem;font-size:.9rem;white-space:pre-wrap}
   .aviso.ok{background:#E6EFEC;color:var(--accion)}
@@ -180,8 +190,15 @@
   <!-- ====== STOCK ====== -->
   <section id="p-stock">
     <input id="buscar" placeholder="Buscar por código o descripción" autocomplete="off">
+    <div class="filtros" id="filtro-tipo" role="group" aria-label="Filtrar por tipo">
+      <button type="button" data-tipo="" aria-pressed="true">Todos</button>
+      <button type="button" data-tipo="COR" aria-pressed="false" title="Cortes">COR</button>
+      <button type="button" data-tipo="SE"  aria-pressed="false" title="Semielaborados">SE</button>
+      <button type="button" data-tipo="ACC" aria-pressed="false" title="Accesorios">ACC</button>
+      <button type="button" data-tipo="MP"  aria-pressed="false" title="Materias primas">MP</button>
+    </div>
     <p id="resumen" class="resumen" aria-live="polite"></p>
-    <div id="lista"><p class="vacio">Cargando…</p></div>
+    <div id="lista"><p class="vacio">Buscá o filtrá para ver productos.</p></div>
   </section>
 
   <!-- ====== MOVIMIENTO ====== -->
@@ -402,24 +419,40 @@ function armarPantalla(rol){
 }
 
 // ---------- stock ----------
+// No se trae nada al abrir: se consulta a la base recién cuando hay una
+// búsqueda o un filtro, y solo lo que coincide. La vista stock_detalle es
+// stock + tipo y etapa de productos (ver sql/stock_detalle.sql).
+//
 // Supabase devuelve como máximo 1000 filas por consulta (o menos, según
-// la configuración del proyecto). Se trae por páginas hasta completar el
-// total que informa la base; si no se llega, no se muestran totales.
+// la configuración del proyecto). Lo que coincide se trae por páginas
+// hasta completar el total que informa la base; si no se llega, la
+// pantalla lo dice y no muestra totales.
 const PAGINA = 1000;
+let filtroTipo = '';          // '' = todos
 let stockIncompleto = null;   // null = completo; si no, {cargados, total, error}
 let turnoStock = 0;
+let esperaStock;
+
+const textoBuscado = () => limpiarBusqueda($('buscar').value);
+const hayFiltro = () => !!(textoBuscado() || filtroTipo);
+
+function consultaStock(conteo){
+  let q = db.from('stock_detalle').select('*', conteo ? { count: 'exact' } : undefined);
+  const t = textoBuscado();
+  if (t) q = q.or(`codigo.ilike.*${t}*,descripcion.ilike.*${t}*`);
+  if (filtroTipo) q = q.eq('tipo', filtroTipo);
+  return q.order('codigo');
+}
 
 async function traerStock(){
-  const primera = await db.from('stock').select('*', { count: 'exact' })
-    .order('codigo').range(0, PAGINA - 1);
+  const primera = await consultaStock(true).range(0, PAGINA - 1);
   if (primera.error) return { error: primera.error };
   const total = primera.count;
   const todas = [...primera.data];
   // Avanza según lo que llegó, no según PAGINA: funciona aunque el
   // proyecto tenga un tope menor a 1000.
   while (total !== null && todas.length < total) {
-    const pag = await db.from('stock').select('*')
-      .order('codigo').range(todas.length, todas.length + PAGINA - 1);
+    const pag = await consultaStock(false).range(todas.length, todas.length + PAGINA - 1);
     if (pag.error) return { filas: todas, total, error: pag.error };
     if (pag.data.length === 0) break;
     todas.push(...pag.data);
@@ -431,12 +464,22 @@ async function traerStock(){
 
 async function cargarStock(){
   const n = ++turnoStock;
+  if (!hayFiltro()) {
+    filas = []; stockIncompleto = null;
+    $('resumen').innerHTML = '';
+    $('lista').innerHTML = '<p class="vacio">Buscá o filtrá para ver productos.</p>';
+    return;
+  }
+  $('lista').innerHTML = '<p class="vacio">Buscando…</p>';
   let res = await traerStock();
   // Un reintento si no cerró la cuenta (p. ej. cambió el catálogo en el medio).
   if (!res.error && res.filas.length !== res.total) res = await traerStock();
-  if (n !== turnoStock) return;
-  if (res.error && !res.filas) { $('lista').innerHTML = `<p class="vacio">${esc(res.error.message)}</p>`; return; }
-
+  if (n !== turnoStock) return;           // llegó una respuesta vieja
+  if (res.error && !res.filas) {
+    $('resumen').innerHTML = '';
+    $('lista').innerHTML = `<p class="vacio">${esc(res.error.message)}</p>`;
+    return;
+  }
   filas = res.filas;
   stockIncompleto = (res.error || res.total === null || filas.length !== res.total)
     ? { cargados: filas.length, total: res.total, error: res.error }
@@ -444,42 +487,59 @@ async function cargarStock(){
   pintar();
 }
 
-function pintar(){
-  const q = $('buscar').value.trim().toLowerCase();
-  const ver = q
-    ? filas.filter(f => (f.codigo + ' ' + f.descripcion).toLowerCase().includes(q))
-    : filas;
+// Describe qué se está contando: siempre lo filtrado.
+function describirFiltro(){
+  const partes = [];
+  if (filtroTipo) partes.push(`tipo ${filtroTipo}`);
+  const t = $('buscar').value.trim();
+  if (t) partes.push(`«${esc(t)}»`);
+  return partes.join(' y ');
+}
 
+function pintar(){
   const fmt = n => n.toLocaleString('es-AR');
+  const filtro = describirFiltro();
   if (stockIncompleto) {
     const { cargados, total, error } = stockIncompleto;
-    $('resumen').innerHTML = `<div class="aviso mal incompleto">No se pudo cargar el stock completo: ` +
-      (total === null ? `se cargaron ${fmt(cargados)} productos y la base no informó el total.`
-                      : `se cargaron ${fmt(cargados)} de ${fmt(total)} productos.`) +
+    $('resumen').innerHTML = `<div class="aviso mal incompleto">No se pudo traer todo lo que coincide con ${filtro}: ` +
+      (total === null ? `llegaron ${fmt(cargados)} productos y la base no informó el total.`
+                      : `llegaron ${fmt(cargados)} de ${fmt(total)} productos.`) +
       ` No se muestran totales porque estarían incompletos.` +
-      (q ? ` La búsqueda solo mira lo que se cargó.` : '') +
       (error ? `\n${esc(error.message)}` : '') + `</div>`;
   } else {
-  const unidades = ver.reduce((t, f) => t + (Number(f.stock) || 0), 0);
-  $('resumen').innerHTML =
-    `<strong>${fmt(ver.length)}</strong> ${ver.length === 1 ? 'producto' : 'productos'}` +
-    (q ? ` de ${fmt(filas.length)}` : '') +
-    ` · <strong>${fmt(unidades)}</strong> ${unidades === 1 ? 'unidad' : 'unidades'} en total`;
+    const unidades = filas.reduce((t, f) => t + (Number(f.stock) || 0), 0);
+    $('resumen').innerHTML = `Con ${filtro}: ` +
+      `<strong>${fmt(filas.length)}</strong> ${filas.length === 1 ? 'producto' : 'productos'}` +
+      ` · <strong>${fmt(unidades)}</strong> ${unidades === 1 ? 'unidad' : 'unidades'}`;
   }
 
-  $('lista').innerHTML = ver.length === 0
+  $('lista').innerHTML = filas.length === 0
     ? '<p class="vacio">Sin resultados.</p>'
-    : ver.map(f => `
+    : filas.map(f => `
         <div class="fila">
           <div class="texto">
-            <div class="codigo">${esc(f.codigo)}</div>
+            <div class="codigo">${esc(f.codigo)}${f.tipo ? `<span class="tipo">${esc(f.tipo)}</span>` : ''}</div>
             <div class="desc">${esc(f.descripcion)}</div>
+            ${f.etapa && f.etapa.trim() ? `<div class="etapa">Etapa: ${esc(f.etapa)}</div>` : ''}
           </div>
           <div class="cant${f.stock < 0 ? ' negativo' : ''}">${esc(f.stock)}</div>
           <div class="donde">${esc(f.posicion ?? '—')}</div>
         </div>`).join('');
 }
-$('buscar').oninput = pintar;
+
+$('buscar').oninput = () => {
+  clearTimeout(esperaStock);
+  esperaStock = setTimeout(cargarStock, 300);
+};
+$('filtro-tipo').onclick = e => {
+  const b = e.target.closest('[data-tipo]');
+  if (!b) return;
+  filtroTipo = b.dataset.tipo;
+  $('filtro-tipo').querySelectorAll('[data-tipo]')
+    .forEach(x => x.setAttribute('aria-pressed', x === b));
+  clearTimeout(esperaStock);
+  cargarStock();
+};
 
 // ---------- motivos (tabla motivos: el signo lo define la base) ----------
 let motivos = [];
@@ -553,9 +613,11 @@ const ORIGENES = ['fabricado', 'comprado', 'importado'];
 // La búsqueda se hace en Postgres, no trayendo la tabla entera: hay cientos
 // de filas y Supabase corta cada consulta en 1000.
 const LIMITE_SUG = 15;
+// Sacamos los caracteres que tienen significado en el filtro de PostgREST.
+function limpiarBusqueda(texto){ return texto.replace(/[,()"*%\\]/g, ' ').trim(); }
+
 function buscarEn(tabla, texto, limite, columnas = '*'){
-  // Sacamos los caracteres que tienen significado en el filtro de PostgREST.
-  const t = texto.replace(/[,()"*%\\]/g, ' ').trim();
+  const t = limpiarBusqueda(texto);
   return db.from(tabla).select(columnas)
     .or(`codigo.ilike.*${t}*,descripcion.ilike.*${t}*`)
     .order('codigo').limit(limite + 1);   // +1 para saber si hay más
@@ -1002,7 +1064,12 @@ function mostrarLogin(){
   $('p-login').hidden = false;
   permitidas = [];
   filas = [];
-  $('lista').innerHTML = '';
+  filtroTipo = '';
+  $('buscar').value = '';
+  $('filtro-tipo').querySelectorAll('[data-tipo]')
+    .forEach(x => x.setAttribute('aria-pressed', x.dataset.tipo === ''));
+  $('resumen').innerHTML = '';
+  $('lista').innerHTML = '<p class="vacio">Buscá o filtrá para ver productos.</p>';
   $('m-prod').value = '';
   prodMov = null;
   $('m-elegido').hidden = true;
